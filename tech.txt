@@ -1,0 +1,19 @@
+HTML5
+CSS3
+JavaScript (ES modules, vanilla JS)
+
+Firebase JavaScript SDK (modular) — v9.22.2
+Firebase Firestore (Cloud Firestore)
+Firebase Authentication
+Firestore Security Rules
+Firestore composite indexes
+Firestore features used: serverTimestamp(), increment(), writeBatch()
+
+Quill Rich Text Editor — v2.0.2
+Bootstrap — v5.3.2
+Bootstrap Icons — v1.11.3
+
+ui-avatars.com (avatar placeholder service used in UI)
+
+Hosting: Vercel
+Version control / source repository: GitHub

@@ -1,0 +1,180 @@
+@font-face {
+  font-family: 'One OS UI 1';
+  src: url('../SVN-Agency FB bold.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+}
+
+:root { --card-radius:14px; --shadow:0 6px 18px rgba(17,24,39,.06); --muted:#6c757d; }
+body { background:#f6f7fb; font-family: "One OS UI 1", system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial; color:#111827; }
+.container-main { max-width:920px; margin:20px auto; padding:0 12px; }
+.card-post { border-radius:var(--card-radius); padding:20px; box-shadow:var(--shadow); background:#fff; }
+.btn-rounded { border-radius:10px; }
+.user-avatar { width:48px; height:48px; border-radius:50%; object-fit:cover; }
+.badge-trial { background:#ffc107; color:#212529; padding:.2rem .45rem; border-radius:8px; font-size:.75rem; }
+.small-muted { color:var(--muted); }
+#__qs_hidden_renderer { position:absolute; left:-99999px; top:0; width:calc(100vw - 40px); max-width:1200px; opacity:0; pointer-events:none; }
+
+/* ===== responsive content fixes for post rendering ===== */
+.post-content { word-wrap:break-word; overflow-wrap:break-word; }
+.post-content img, .post-content video { max-width:100%; height:auto; display:block; margin:12px 0; object-fit:contain; cursor:zoom-in; }
+.post-content img.full-width { width:100%; }
+.post-content iframe { max-width:100%; width:100%; display:block; border:0; }
+/* Make embedded media (YouTube, etc.) maintain aspect ratio inside a responsive wrapper */
+.post-content .iframe-wrapper { position:relative; width:100%; max-width:100%; padding-bottom:56.25%; height:0; overflow:hidden; margin:12px 0; }
+
+/* Tables: horizontal scroll on overflow */
+.post-content .table-wrapper { width:100%; overflow:auto; -webkit-overflow-scrolling:touch; box-shadow: inset 0 0 0 1px rgba(0,0,0,0.02); margin:12px 0; }
+.post-content table { width:100%; border-collapse:collapse; }
+
+/* Lists: make sure bullet lists keep bullet style and wrap nicely */
+.post-content ul { list-style-type: disc; margin-left:1.25rem; padding-left:0; }
+.post-content ol { list-style-type: decimal; margin-left:1.25rem; padding-left:0; }
+.post-content ul li, .post-content ol li { word-break:break-word; overflow-wrap:break-word; }
+
+/* Code / pre blocks: enable wrapping and scroll for long lines */
+.post-content pre { white-space:pre-wrap; overflow:auto; padding:12px; border-radius:8px; background:#0f172a10; }
+.post-content code { word-break:break-word; }
+
+/* Prevent large elements from forcing horizontal scroll on small devices */
+img, video, iframe { max-width:100%; }
+
+/* Comments area: long comment text should wrap instead of overflowing */
+#commentsList { word-break:break-word; overflow-wrap:break-word; }
+#commentsList .comment-text { white-space:pre-wrap; word-break:break-word; overflow-wrap:break-word; }
+
+/* Minor adjustments for editor rendering area when used for capturing computed styles */
+#__qs_hidden_renderer { display:none; }
+
+/* ======== Soft rounded media for better visuals ======== */
+.post-content img,
+.post-content video {
+  border-radius: 12px;      /* bo góc cho hình & video */
+  overflow: hidden;         /* đảm bảo nội dung không vọt ra */
+  display: block;
+}
+.post-content img.full-width { border-radius: 12px; }
+.post-content .iframe-wrapper {
+  border-radius: 12px;
+  overflow: hidden;         /* quan trọng: cắt góc của iframe */
+  box-shadow: 0 6px 18px rgba(17,24,39,0.06);
+  margin: 12px 0;
+}
+.post-content .iframe-wrapper iframe,
+.post-content .iframe-wrapper video {
+  border: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  position: absolute;
+  top: 0;
+  left: 0;
+  -webkit-backface-visibility: hidden;
+}
+
+/* ======== Force unordered lists to display bullets (fix for Quill output inconsistencies) ======== */
+.post-content ul { list-style-type: disc !important; }
+.post-content ul li { list-style-type: disc !important; }
+.post-content ol { list-style-type: decimal !important; }
+/* marker styling for modern browsers */
+.post-content li::marker { font-weight: 500; color: inherit; }
+
+/* Ensure Quill-generated list paragraphs are handled (visual fallback) */
+.post-content .ql-list { margin:0; padding:0; }
+
+/* ================= Image Viewer styles (improved for performance) ================= */
+.os-viewer-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(2,6,23,0.88);
+  display: none; /* toggled by JS */
+  align-items: center;
+  justify-content: center;
+  z-index: 20000;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: none; /* prevent default gestures from the browser */
+}
+
+.os-viewer-overlay.open { display: flex; }
+
+.os-viewer-inner {
+  position: relative;
+  max-width: 95%;
+  max-height: 95%;
+  width: auto;
+  height: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  outline: none;
+}
+
+/* the image that we transform (scale + translate) */
+/* use translate3d and will-change to promote to its own layer (GPU) */
+.os-viewer-img {
+  max-width: 100%;
+  max-height: 100%;
+  user-select: none;
+  -webkit-user-drag: none;
+  cursor: grab;
+  display: block;
+  border-radius: 10px;
+  box-shadow: 0 14px 40px rgba(0,0,0,0.5);
+  will-change: transform;
+  transform-origin: 0 0;
+  -webkit-transform: translate3d(0,0,0);
+}
+
+/* controls (SVG icons) */
+.os-viewer-controls {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  pointer-events: auto;
+}
+
+.os-viewer-controls button, .os-viewer-controls a {
+  background: rgba(255,255,255,0.06);
+  color: #fff;
+  border: 0;
+  padding: 8px;
+  border-radius: 8px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items:center;
+  justify-content:center;
+  min-width:38px;
+  min-height:38px;
+}
+.os-viewer-controls button:hover, .os-viewer-controls a:hover { background: rgba(255,255,255,0.12); }
+
+.os-viewer-zoom-indicator {
+  position: absolute;
+  bottom: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  color: #fff;
+  font-weight: 500;
+  background: rgba(0,0,0,0.3);
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-size: 0.9rem;
+  pointer-events:none;
+}
+
+.os-viewer-hint {
+  position: absolute;
+  bottom: 12px;
+  right: 12px;
+  color: rgba(255,255,255,0.78);
+  font-size: 0.85rem;
+  pointer-events:none;
+}
+
+@media (max-width:600px){
+  .os-viewer-controls button { padding: 10px; min-width:44px; min-height:44px; }
+  .os-viewer-hint { display: none; }
+}

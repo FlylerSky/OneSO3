@@ -1,0 +1,189 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ---------------- POSTS ----------------
+    match /posts/{postId} {
+      // Public read
+      allow read: if true;
+
+      // Create: authenticated users may create posts (userId must match) OR anonymous allowed (legacy)
+      allow create: if
+        request.resource.data.createdAt == request.time
+        && request.resource.data.likes == 0
+        && request.resource.data.dislikes == 0
+        && request.resource.data.commentsCount == 0
+        && (
+          (request.auth != null && request.resource.data.userId == request.auth.uid)
+          || (request.auth == null)
+        );
+
+      // Delete: only owner
+      allow delete: if request.auth != null && resource.data.userId == request.auth.uid;
+
+      // Update:
+      // - Owner can update post content (not reaction/comment counters)
+      // - Authenticated users may change reaction counters and commentsCount in controlled ±1 steps
+      allow update: if (
+        // owner editing content (must not change counters)
+        (request.auth != null
+          && resource.data.userId == request.auth.uid
+          && request.resource.data.createdAt == resource.data.createdAt
+          && request.resource.data.userId == resource.data.userId
+          && !request.resource.data.diff(resource.data).changedKeys().hasAny(['likes','dislikes','commentsCount'])
+        )
+        ||
+        // controlled counter-only updates by authenticated users
+        (
+          request.auth != null
+          && request.resource.data.diff(resource.data).changedKeys().hasOnly(['likes','dislikes','commentsCount'])
+          && request.resource.data.likes is int
+          && request.resource.data.dislikes is int
+          && request.resource.data.commentsCount is int
+          // allow counters to stay same or change by ±1
+          && (
+            request.resource.data.likes == resource.data.likes
+            || request.resource.data.likes == resource.data.likes + 1
+            || request.resource.data.likes == resource.data.likes - 1
+          )
+          && (
+            request.resource.data.dislikes == resource.data.dislikes
+            || request.resource.data.dislikes == resource.data.dislikes + 1
+            || request.resource.data.dislikes == resource.data.dislikes - 1
+          )
+          && (
+            request.resource.data.commentsCount == resource.data.commentsCount
+            || request.resource.data.commentsCount == resource.data.commentsCount + 1
+            || request.resource.data.commentsCount == resource.data.commentsCount - 1
+          )
+        )
+      );
+
+      // -------- comments subcollection --------
+      match /comments/{commentId} {
+        allow read: if true;
+
+        // Create: only authenticated users, userId must match auth.uid, createdAt must be server time
+        allow create: if request.auth != null
+                      && request.resource.data.userId == request.auth.uid
+                      && request.resource.data.displayName is string
+                      && request.resource.data.text is string
+                      && request.resource.data.createdAt == request.time;
+
+        // Update: allow ONLY the comment owner to update displayName field (to support profile name propagation)
+        allow update: if request.auth != null
+                      && resource.data.userId == request.auth.uid
+                      && request.resource.data.displayName is string
+                      && request.resource.data.diff(resource.data).changedKeys().hasOnly(['displayName']);
+
+        // No deletes via client
+        allow delete: if false;
+      }
+
+      // -------- likes subcollection --------
+      match /likes/{likeId} {
+        allow read: if true;
+        // create: auth user may create a like/dislike doc whose id equals their uid
+        allow create: if request.auth != null
+                      && request.auth.uid == likeId
+                      && request.resource.data.userId == request.auth.uid
+                      && request.resource.data.type in ['like','dislike']
+                      && request.resource.data.createdAt == request.time;
+        // update: owner may flip type
+        allow update: if request.auth != null
+                      && request.auth.uid == likeId
+                      && request.resource.data.userId == request.auth.uid
+                      && request.resource.data.type in ['like','dislike'];
+        // delete: owner may delete their like doc
+        allow delete: if request.auth != null && request.auth.uid == likeId;
+      }
+    }
+
+    // ---------------- USERS ----------------
+    match /users/{userId} {
+      allow read: if true;
+
+      // Create: signup only by authenticated user with matching uid and email
+      allow create: if request.auth != null
+                    && request.auth.uid == userId
+                    && request.resource.data.email == request.auth.token.email;
+
+      // Update: owner may update their full profile
+      // OR controlled adjustments to followersCount/followingCount by ±1 (including case where field missing -> set to 1)
+      allow update: if (
+        request.auth != null && request.auth.uid == userId
+      ) || (
+        request.auth != null
+        && request.resource.data.diff(resource.data).changedKeys().hasOnly(['followersCount','followingCount'])
+        && (
+          // followersCount: either unchanged OR ±1 if exists OR set to 1 if missing
+          (
+            (resource.data.followersCount is int && (
+               request.resource.data.followersCount == resource.data.followersCount
+               || request.resource.data.followersCount == resource.data.followersCount + 1
+               || request.resource.data.followersCount == resource.data.followersCount - 1
+            ))
+            || (!resource.data.keys().hasAll(['followersCount']) && request.resource.data.followersCount == 1)
+          )
+        )
+        && (
+          // followingCount: either unchanged OR ±1 if exists OR set to 1 if missing
+          (
+            (resource.data.followingCount is int && (
+               request.resource.data.followingCount == resource.data.followingCount
+               || request.resource.data.followingCount == resource.data.followingCount + 1
+               || request.resource.data.followingCount == resource.data.followingCount - 1
+            ))
+            || (!resource.data.keys().hasAll(['followingCount']) && request.resource.data.followingCount == 1)
+          )
+        )
+      );
+
+      // Delete: only owner
+      allow delete: if request.auth != null && request.auth.uid == userId;
+
+      // -------- followers subcollection --------
+      match /followers/{followerId} {
+        allow read: if true;
+        allow create: if request.auth != null
+                      && request.auth.uid == followerId
+                      && request.resource.data.userId == request.auth.uid
+                      && request.resource.data.createdAt == request.time;
+        allow delete: if request.auth != null && request.auth.uid == followerId;
+        allow update: if false;
+      }
+
+      // -------- following subcollection --------
+      match /following/{followingId} {
+        allow read: if true;
+        allow create: if request.auth != null
+                      && request.auth.uid == userId
+                      && request.resource.data.userId == followingId
+                      && request.resource.data.createdAt == request.time;
+        allow delete: if request.auth != null && request.auth.uid == userId;
+        allow update: if false;
+      }
+
+      // -------- visitors subcollection --------
+      match /visitors/{visitorId} {
+        // visitors list readable only by profile owner
+        allow read: if request.auth != null && request.auth.uid == userId;
+
+        // visitor may create/update their own visitor doc (lastVisitedAt must be server time)
+        allow create, update: if request.auth != null
+                               && request.auth.uid == visitorId
+                               && request.resource.data.userId == request.auth.uid
+                               && request.resource.data.lastVisitedAt == request.time;
+
+        // delete only by owner or visitor
+        allow delete: if request.auth != null && (request.auth.uid == userId || request.auth.uid == visitorId);
+      }
+    }
+
+    // ---------------- searchStats ----------------
+    match /searchStats/{doc} {
+      allow read: if true;
+      allow write: if true;
+    }
+  }
+}

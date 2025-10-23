@@ -1,0 +1,104 @@
+# Firestore data structure (One Social)
+# File: data-firestore
+# Mục đích: liệt kê các collection / document và các trường (fields) đang sử dụng trong One Social.
+# Lưu ý: kiểu dữ liệu chỉ mang tính tham khảo theo cách ứng dụng sử dụng (string, int, timestamp, array, boolean).
+
+------------------------------------------------------------
+Collection: posts
+Document ID: {postId}
+Fields:
+  - title: string
+  - content: string        // HTML sinh ra từ Quill (có thể chứa <p>, <ol>, <ul>, <img>, <iframe>, ...)
+  - displayName: string    // tên hiển thị của tác giả tại thời điểm đăng
+  - authorTag: string|null // tagName của tác giả (vd: "@lan123"), có thể null
+  - userId: string         // uid của tác giả (Firestore Auth UID)
+  - likes: int             // tổng số lượt like (default 0)
+  - dislikes: int          // tổng số lượt dislike (default 0)
+  - commentsCount: int     // tổng số bình luận (default 0)
+  - hashtags: array<string>// mảng hashtag (vd: ["#game","#news"])
+  - createdAt: timestamp   // serverTimestamp() khi tạo
+  - updatedAt: timestamp?  // optional, serverTimestamp() khi chỉnh sửa
+  - (các trường khác có thể tồn tại tùy implement nhưng nội dung chính là trên)
+
+Subcollections under posts:
+  posts/{postId}/comments
+    Document ID: {commentId}
+    Fields:
+      - userId: string        // uid của người bình luận
+      - displayName: string  // tên hiển thị của người bình luận (lưu để hiện thị nhanh)
+      - text: string         // nội dung bình luận (plain text)
+      - createdAt: timestamp // serverTimestamp()
+      - (không cho edit text theo rules, chỉ cho phép cập nhật displayName bởi chủ comment)
+
+  posts/{postId}/likes
+    Document ID: {likeId}    // thường dùng uid của user làm id
+    Fields:
+      - userId: string
+      - type: string         // 'like' hoặc 'dislike'
+      - createdAt: timestamp
+      - updatedAt: timestamp? // khi đổi type (like <-> dislike)
+
+------------------------------------------------------------
+Collection: users
+Document ID: {userId}
+Fields:
+  - email: string
+  - displayName: string
+  - tagName: string|null       // Tag Name Search (unique, dạng "@name")
+  - avatarUrl: string|null
+  - bio: string|null
+  - gender: string|null
+  - birthday: string|null      // định dạng hiển thị (vd: "YYYY-MM-DD" hoặc text)
+  - country: string|null
+  - activated: boolean         // trạng thái kích hoạt tài khoản
+  - activationCode: string?    // (admin thêm thủ công) dùng cho lần kích hoạt đầu
+  - followersCount: int?       // (optional) có thể không tồn tại; hệ thống còn dùng collection followers để tính size
+  - followingCount: int?       // (optional)
+  - createdAt: timestamp
+  - updatedAt: timestamp?
+
+Subcollections under users:
+  users/{userId}/followers/{followerId}
+    Document ID: {followerId}  // thường là uid của follower
+    Fields:
+      - userId: string         // uid của follower
+      - createdAt: timestamp
+      - displayName: string?   // snapshot tên/ảnh của follower tại thời điểm follow
+      - avatarUrl: string?     // optional
+      - tagName: string?       // optional
+
+  users/{userId}/following/{followingId}
+    Document ID: {followingId} // uid của người được follow
+    Fields:
+      - userId: string         // uid của target
+      - createdAt: timestamp
+      - displayName: string?   // optional snapshot
+      - avatarUrl: string?     // optional
+
+  users/{userId}/visitors/{visitorId}
+    Document ID: {visitorId}  // uid của visitor (người ghé thăm)
+    Fields:
+      - userId: string         // uid của visitor
+      - displayName: string?   // tên hiển thị nếu có (lấy từ users/{visitorId} khi lưu)
+      - tagName: string?       // tagName nếu có
+      - avatarUrl: string?     // avatar snapshot hoặc photoURL
+      - lastVisitedAt: timestamp // serverTimestamp() khi visite lại (merge/update)
+
+------------------------------------------------------------
+Collection: searchStats
+Document ID: {doc}
+Fields:
+  - term: string
+  - count: int
+  - updatedAt: timestamp
+
+------------------------------------------------------------
+Ghi chú / Hành vi liên quan:
+- Nhiều thao tác tạo (create) dùng serverTimestamp() cho createdAt.
+- Counters như likes/dislikes/commentsCount có thể được cập nhật bởi client (increment) hoặc maintain bằng server/Cloud Function; trong One Social hiện có logic client-side + rules kiểm soát.
+- Một số trường (followersCount/followingCount) có thể tồn tại nhưng hệ thống cũng dựa vào kích thước subcollection followers/following để lấy số thực tế.
+- posts.content chứa HTML do Quill, do đó các media (iframe/img) nhúng trong content — hiển thị phụ thuộc frontend.
+- Comment documents giữ displayName tĩnh (để hiển thị lịch sử); khi user đổi tên, hệ thống có chức năng propagate để cập nhật displayName trong các comments do user đó viết (cần rules cho phép owner update đúng field displayName của comment).
+
+------------------------------------------------------------
+(End of data schema)
