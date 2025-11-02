@@ -1,5 +1,4 @@
-// JS/tag.js - Relife UI 1.0 Enhanced
-// Optimized for Liquid Glass Design System
+// JS/tag.js (module) - Complete rewrite with search and fixes
 import { initFirebase } from '../firebase-config.js';
 import { collection, query, orderBy, getDocs, onSnapshot } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore.js";
 
@@ -20,79 +19,49 @@ const sortNewestBtn = document.getElementById('sortNewest');
 
 // Utility functions
 const esc = s => String(s || '').replace(/[&<>"']/g, m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
-const fmtDate = ts => { 
-  try { 
-    if(!ts?.toDate) return '';
-    const date = ts.toDate();
-    const now = new Date();
-    const diff = now - date;
-    const minutes = Math.floor(diff / 60000);
-    const hours = Math.floor(diff / 3600000);
-    const days = Math.floor(diff / 86400000);
-    
-    if(minutes < 1) return 'Vừa xong';
-    if(minutes < 60) return `${minutes} phút trước`;
-    if(hours < 24) return `${hours} giờ trước`;
-    if(days < 7) return `${days} ngày trước`;
-    return date.toLocaleDateString('vi-VN');
-  } catch { 
-    return ''; 
-  } 
-};
+const fmtDate = ts => { try { return ts?.toDate ? ts.toDate().toLocaleString('vi-VN') : ''; } catch { return ''; } };
 
-// Connection status with enhanced UI
-function updateConn() {
-  const isOnline = navigator.onLine;
-  const statusDot = statusConn.querySelector('.relife-status-dot');
-  const statusText = statusConn.querySelector('.relife-status-text');
-  
-  if(isOnline) {
-    statusConn.style.background = 'rgba(52, 199, 89, 0.1)';
-    statusConn.style.color = '#34C759';
-    statusDot.style.background = '#34C759';
-    statusText.textContent = 'Online';
-  } else {
-    statusConn.style.background = 'rgba(255, 45, 85, 0.1)';
-    statusConn.style.color = '#FF2D55';
-    statusDot.style.background = '#FF2D55';
-    statusText.textContent = 'Offline';
-  }
+// Connection status
+function updateConn(){ 
+  statusConn.textContent = navigator.onLine ? 'Online' : 'Offline'; 
 }
-window.addEventListener('online', updateConn);
-window.addEventListener('offline', updateConn);
+window.addEventListener('online', updateConn); 
+window.addEventListener('offline', updateConn); 
 updateConn();
 
 // State
 let allPosts = [];
 let selectedTag = new URLSearchParams(location.search).get('tag');
 if(selectedTag) selectedTag = decodeURIComponent(selectedTag);
-let viewMode = 'trending';
-let allHashtags = new Map();
+let viewMode = 'trending'; // 'trending' or 'newest'
+let allHashtags = new Map(); // Map<lowercaseTag, {tag, count, posts}>
 
 // Initialize
-if(!selectedTag) {
-  activeTagTitle.textContent = 'Khám phá';
+if(!selectedTag){
+  activeTagTitle.textContent = 'Khám phá Topics';
   const c = document.getElementById('activeTagCount');
-  if(c) c.textContent = 'Chọn hashtag để bắt đầu';
+  if(c) c.textContent = 'Chọn hashtag để bắt đầu.';
 } else {
   activeTagTitle.textContent = selectedTag.replace(/^#/, '');
 }
 
-// Sort button handlers with enhanced animations
-sortTrendingBtn.addEventListener('click', () => {
-  if(viewMode === 'trending') return;
-  viewMode = 'trending';
-  sortTrendingBtn.classList.add('active');
-  sortNewestBtn.classList.remove('active');
-  loadPostsForTag();
+// Sort button handlers
+sortTrendingBtn.addEventListener('click', () => { 
+  viewMode = 'trending'; 
+  sortTrendingBtn.classList.remove('btn-outline-primary');
+  sortTrendingBtn.classList.add('btn-primary');
+  sortNewestBtn.classList.remove('btn-primary');
+  sortNewestBtn.classList.add('btn-outline-secondary');
+  loadPostsForTag(); 
 });
 
-sortNewestBtn.addEventListener('click', () => {
-  if(viewMode === 'newest') return;
-  viewMode = 'newest';
-  sortNewestBtn.classList.add('active');
-  sortTrendingBtn.classList.remove('active');
-  loadPostsForTag();
+sortNewestBtn.addEventListener('click', () => { 
+  viewMode = 'newest'; 
+  sortNewestBtn.classList.remove('btn-outline-secondary');
+  sortNewestBtn.classList.add('btn-primary');
+  sortTrendingBtn.classList.remove('btn-primary');
+  sortTrendingBtn.classList.add('btn-outline-primary');
+  loadPostsForTag(); 
 });
 
 // Real-time posts subscription
@@ -100,18 +69,21 @@ const postsRef = collection(db, 'posts');
 onSnapshot(query(postsRef, orderBy('createdAt', 'desc')), snap => {
   allPosts = snap.docs.map(d => ({ id: d.id, ...d.data() }));
   
+  // Rebuild hashtag collections
   buildHashtagCollections(allPosts);
+  
+  // Render trending (14-day window)
   computeTrendingHashtagsRealtime(allPosts);
+  
+  // Render all hashtags list
   renderAllHashtags();
   
+  // Load posts for selected tag if any
   if(selectedTag) loadPostsForTag();
-}, err => {
-  console.error('Posts subscription error:', err);
-  showError('Không thể tải bài viết. Vui lòng thử lại.');
 });
 
 /**
- * Build complete hashtag collections
+ * Build complete hashtag collections (all time)
  */
 function buildHashtagCollections(posts) {
   allHashtags.clear();
@@ -130,7 +102,7 @@ function buildHashtagCollections(posts) {
 }
 
 /**
- * Render all hashtags list with Relife UI style
+ * Render all hashtags list (right sidebar)
  */
 function renderAllHashtags() {
   const items = Array.from(allHashtags.values())
@@ -139,12 +111,7 @@ function renderAllHashtags() {
   allHashtagsCount.textContent = items.length;
   
   if(items.length === 0) {
-    allHashtagsList.innerHTML = `
-      <div class="empty-state">
-        <i class="bi bi-hash"></i>
-        <div>Chưa có hashtag nào</div>
-      </div>
-    `;
+    allHashtagsList.innerHTML = '<div class="empty-state"><i class="bi bi-hash"></i><div>Chưa có hashtag nào</div></div>';
     return;
   }
   
@@ -160,16 +127,19 @@ function renderAllHashtags() {
   
   allHashtagsList.innerHTML = html;
   
-  // Smooth scroll effect
-  allHashtagsList.style.opacity = '0';
-  setTimeout(() => {
-    allHashtagsList.style.transition = 'opacity 0.3s ease';
-    allHashtagsList.style.opacity = '1';
-  }, 50);
+  // Add click handlers
+  allHashtagsList.querySelectorAll('.all-hashtag-item').forEach(item => {
+    item.addEventListener('click', (e) => {
+      if(e.target.tagName.toLowerCase() !== 'a') {
+        const tag = item.dataset.tag;
+        window.location.href = `tag.html?tag=${encodeURIComponent(tag)}`;
+      }
+    });
+  });
 }
 
 /**
- * Compute trending hashtags with enhanced algorithm
+ * Compute trending hashtags (14-day window) for leaderboard
  */
 function computeTrendingHashtagsRealtime(posts) {
   const now = Date.now();
@@ -180,6 +150,7 @@ function computeTrendingHashtagsRealtime(posts) {
     const created = p.createdAt?.toMillis ? p.createdAt.toMillis() : 0;
     const daysAgo = created ? Math.max(0, (now - created) / (1000 * 60 * 60 * 24)) : 365;
     
+    // Only include posts within 14-day window for trending
     if(daysAgo > windowDays) return;
     
     const likes = p.likes || 0;
@@ -201,24 +172,15 @@ function computeTrendingHashtagsRealtime(posts) {
     .slice(0, 20);
   
   if(items.length === 0) {
-    hashtagLeaderboard.innerHTML = `
-      <div class="empty-state">
-        <i class="bi bi-graph-up"></i>
-        <div>Chưa có hashtag thịnh hành</div>
-      </div>
-    `;
+    hashtagLeaderboard.innerHTML = '<div class="empty-state"><i class="bi bi-graph-up"></i><div>Chưa có hashtag thịnh hành (14 ngày)</div></div>';
     return;
   }
   
   let html = '';
-  items.forEach((it, idx) => {
-    const rank = idx + 1;
-    const emoji = rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : '';
+  items.forEach(it => {
     html += `
-      <div class="leaderboard-item" style="animation-delay: ${idx * 0.05}s;">
-        <a class="hashtag-btn" href="tag.html?tag=${encodeURIComponent(it.tag)}">
-          ${emoji} ${esc(it.tag)}
-        </a>
+      <div class="leaderboard-item">
+        <a class="hashtag-btn" href="tag.html?tag=${encodeURIComponent(it.tag)}">${esc(it.tag)}</a>
         <div class="small-muted">${it.count} bài</div>
       </div>
     `;
@@ -231,37 +193,32 @@ function computeTrendingHashtagsRealtime(posts) {
  * Load and display posts for selected tag
  */
 function loadPostsForTag() {
-  showLoading();
+  postsList.innerHTML = '<div class="text-center text-muted py-4">Đang tải...</div>';
   
   if(!selectedTag) {
-    postsList.innerHTML = `
-      <div class="empty-state">
-        <i class="bi bi-inbox"></i>
-        <div>Chọn hashtag từ bảng bên phải để xem bài viết</div>
-      </div>
-    `;
+    postsList.innerHTML = '<div class="text-center text-muted py-4">Chọn hashtag từ bảng bên phải.</div>';
     return;
   }
   
-  const filteredPosts = allPosts.filter(p =>
+  // Filter posts by selected tag
+  const filteredPosts = allPosts.filter(p => 
     (p.hashtags || []).some(h => h.toLowerCase() === selectedTag.toLowerCase())
   );
   
   if(filteredPosts.length === 0) {
-    postsList.innerHTML = `
-      <div class="empty-state">
-        <i class="bi bi-inbox"></i>
-        <div>Chưa có bài viết cho ${esc(selectedTag)}</div>
-      </div>
-    `;
+    postsList.innerHTML = `<div class="empty-state"><i class="bi bi-inbox"></i><div>Chưa có bài viết cho ${esc(selectedTag)}</div></div>`;
     return;
   }
   
+  // Sort based on view mode
   const sortedPosts = sortPosts(filteredPosts, viewMode);
+  
+  // Render posts
   renderPosts(sortedPosts);
   
+  // Update count
   const activeTagCountEl = document.getElementById('activeTagCount');
-  if(activeTagCountEl) activeTagCountEl.textContent = `${sortedPosts.length} bài viết`;
+  if(activeTagCountEl) activeTagCountEl.textContent = `${sortedPosts.length} bài`;
 }
 
 /**
@@ -271,12 +228,14 @@ function sortPosts(posts, mode) {
   const now = Date.now();
   
   if(mode === 'trending') {
+    // Trending: likes + comments + freshness
     return [...posts].sort((a, b) => {
       const scoreA = calculateTrendingScore(a, now);
       const scoreB = calculateTrendingScore(b, now);
       return scoreB - scoreA;
     });
   } else {
+    // Newest: by createdAt desc
     return [...posts].sort((a, b) => {
       const timeA = a.createdAt?.toMillis ? a.createdAt.toMillis() : 0;
       const timeB = b.createdAt?.toMillis ? b.createdAt.toMillis() : 0;
@@ -286,7 +245,7 @@ function sortPosts(posts, mode) {
 }
 
 /**
- * Calculate trending score
+ * Calculate trending score for a post
  */
 function calculateTrendingScore(post, now) {
   const likes = post.likes || 0;
@@ -299,38 +258,34 @@ function calculateTrendingScore(post, now) {
 }
 
 /**
- * Render posts with Relife UI style
+ * Render posts list
  */
 function renderPosts(posts) {
   let html = '';
   
-  posts.forEach((p, idx) => {
+  posts.forEach(p => {
     const plain = DOMPurify.sanitize(p.content || '', { ALLOWED_TAGS: [] });
-    const snippet = plain.length > 180 ? plain.slice(0, 180) + '…' : plain;
+    const snippet = plain.length > 220 ? plain.slice(0, 220) + '…' : plain;
     
     html += `
-      <div class="relife-post-card" style="animation: fadeInUp 0.4s ease ${idx * 0.05}s both;">
-        <div class="relife-post-header">
-          <div class="relife-post-info">
+      <div class="mb-3 p-3 border rounded card">
+        <div class="d-flex justify-content-between">
+          <div>
             <div class="fw-bold">${esc(p.title || '(Không tiêu đề)')}</div>
-            <div class="small-muted">
-              <i class="bi bi-person-circle"></i> ${esc(p.displayName || 'Ẩn danh')}
-            </div>
+            <div class="small-muted">${esc(p.displayName || '')}</div>
           </div>
-          <div class="relife-post-stats">
-            <div><i class="bi bi-hand-thumbs-up-fill"></i> ${p.likes || 0}</div>
-            <div><i class="bi bi-chat-fill"></i> ${p.commentsCount || 0}</div>
+          <div class="text-end small-muted">
+            <div><i class="bi bi-hand-thumbs-up"></i> ${p.likes || 0}</div>
+            <div><i class="bi bi-chat"></i> ${p.commentsCount || 0}</div>
           </div>
         </div>
-        <div class="relife-post-snippet">${esc(snippet)}</div>
-        <div class="relife-post-meta">
-          <div class="relife-post-time">
-            <i class="bi bi-clock"></i>
-            <span>${fmtDate(p.createdAt)}</span>
-          </div>
-          <a class="relife-post-action" href="post.html?id=${p.id}">
-            <span>Xem bài</span>
-            <i class="bi bi-arrow-right"></i>
+        <div class="mt-2 snippet">${esc(snippet)}</div>
+        <div class="mt-2">
+          <small class="small-muted"><i class="bi bi-clock"></i> ${fmtDate(p.createdAt)}</small>
+        </div>
+        <div class="mt-2 text-end">
+          <a class="btn btn-sm btn-outline-primary btn-rounded" href="post.html?id=${p.id}">
+            <i class="bi bi-box-arrow-up-right"></i> Xem bài
           </a>
         </div>
       </div>
@@ -341,37 +296,14 @@ function renderPosts(posts) {
 }
 
 /**
- * Show loading state
- */
-function showLoading() {
-  postsList.innerHTML = `
-    <div class="relife-loading">
-      <div class="relife-spinner"></div>
-      <div>Đang tải bài viết...</div>
-    </div>
-  `;
-}
-
-/**
- * Show error state
- */
-function showError(message) {
-  postsList.innerHTML = `
-    <div class="empty-state">
-      <i class="bi bi-exclamation-triangle"></i>
-      <div>${esc(message)}</div>
-    </div>
-  `;
-}
-
-/**
- * Search functionality with debounce
+ * Search functionality
  */
 let searchTimeout = null;
 
 tagSearchInput.addEventListener('input', (e) => {
   const keyword = e.target.value.trim();
   
+  // Show/hide clear button
   clearSearchBtn.style.display = keyword ? 'block' : 'none';
   
   if(!keyword) {
@@ -379,6 +311,7 @@ tagSearchInput.addEventListener('input', (e) => {
     return;
   }
   
+  // Debounce search
   clearTimeout(searchTimeout);
   searchTimeout = setTimeout(() => performSearch(keyword), 300);
 });
@@ -387,20 +320,21 @@ clearSearchBtn.addEventListener('click', () => {
   tagSearchInput.value = '';
   clearSearchBtn.style.display = 'none';
   tagSearchResults.style.display = 'none';
-  tagSearchInput.focus();
 });
 
 /**
- * Perform search with enhanced UI
+ * Perform search across hashtags and posts
  */
 function performSearch(keyword) {
   const kw = keyword.toLowerCase();
   
+  // Search hashtags
   const matchingHashtags = Array.from(allHashtags.values())
     .filter(h => h.tag.toLowerCase().includes(kw))
     .sort((a, b) => b.count - a.count)
     .slice(0, 10);
   
+  // Search posts (title + content)
   const matchingPosts = allPosts
     .filter(p => {
       const titleMatch = (p.title || '').toLowerCase().includes(kw);
@@ -408,12 +342,13 @@ function performSearch(keyword) {
       const authorMatch = (p.displayName || '').toLowerCase().includes(kw);
       return titleMatch || contentMatch || authorMatch;
     })
-    .slice(0, 8);
+    .slice(0, 10);
   
+  // Render search results
   let html = '';
   
   if(matchingHashtags.length > 0) {
-    html += '<div class="mb-2 px-2"><small class="small-muted fw-bold">HASHTAGS</small></div>';
+    html += '<div class="mb-2"><small class="small-muted fw-bold">HASHTAGS</small></div>';
     matchingHashtags.forEach(h => {
       html += `
         <div class="search-result-item search-result-hashtag" data-type="hashtag" data-tag="${esc(h.tag)}">
@@ -425,17 +360,17 @@ function performSearch(keyword) {
         </div>
       `;
     });
-    if(matchingPosts.length > 0) html += '<hr style="opacity: 0.2;">';
+    html += '<hr>';
   }
   
   if(matchingPosts.length > 0) {
-    html += '<div class="mb-2 px-2"><small class="small-muted fw-bold">BÀI VIẾT</small></div>';
+    html += '<div class="mb-2"><small class="small-muted fw-bold">BÀI VIẾT</small></div>';
     matchingPosts.forEach(p => {
       html += `
         <div class="search-result-item" data-type="post" data-id="${p.id}">
           <div class="fw-bold">${esc(p.title || '(Không tiêu đề)')}</div>
           <small class="small-muted">
-            ${esc(p.displayName || 'Ẩn danh')} · 
+            ${esc(p.displayName || '')} · 
             <i class="bi bi-hand-thumbs-up"></i> ${p.likes || 0} · 
             <i class="bi bi-chat"></i> ${p.commentsCount || 0}
           </small>
@@ -445,17 +380,13 @@ function performSearch(keyword) {
   }
   
   if(!html) {
-    html = `
-      <div class="empty-state" style="padding: 2rem 1rem;">
-        <i class="bi bi-search" style="font-size: 2rem;"></i>
-        <div>Không tìm thấy kết quả</div>
-      </div>
-    `;
+    html = '<div class="text-center text-muted py-3">Không tìm thấy kết quả</div>';
   }
   
   tagSearchResults.innerHTML = html;
   tagSearchResults.style.display = 'block';
   
+  // Add click handlers
   tagSearchResults.querySelectorAll('.search-result-item').forEach(item => {
     item.addEventListener('click', () => {
       const type = item.dataset.type;
@@ -473,25 +404,14 @@ function performSearch(keyword) {
 
 // Close search results when clicking outside
 document.addEventListener('click', (e) => {
-  if(!tagSearchInput.contains(e.target) && 
-     !tagSearchResults.contains(e.target) && 
-     !clearSearchBtn.contains(e.target)) {
+  if(!tagSearchInput.contains(e.target) && !tagSearchResults.contains(e.target)) {
     tagSearchResults.style.display = 'none';
-  }
-});
-
-// Keyboard navigation for search
-tagSearchInput.addEventListener('keydown', (e) => {
-  if(e.key === 'Escape') {
-    tagSearchResults.style.display = 'none';
-    tagSearchInput.blur();
   }
 });
 
 // Initial load
 (async () => {
   try {
-    showLoading();
     const snaps = await getDocs(query(collection(db, 'posts'), orderBy('createdAt', 'desc')));
     allPosts = snaps.docs.map(s => ({ id: s.id, ...s.data() }));
     
@@ -499,32 +419,9 @@ tagSearchInput.addEventListener('keydown', (e) => {
     computeTrendingHashtagsRealtime(allPosts);
     renderAllHashtags();
     
-    if(selectedTag) {
-      loadPostsForTag();
-    } else {
-      postsList.innerHTML = `
-        <div class="empty-state">
-          <i class="bi bi-hash"></i>
-          <div>Chọn hashtag để bắt đầu khám phá</div>
-        </div>
-      `;
-    }
+    if(selectedTag) loadPostsForTag();
   } catch(err) {
     console.error('Initial load error:', err);
-    showError('Lỗi khi tải dữ liệu. Vui lòng thử lại.');
+    postsList.innerHTML = '<div class="text-center text-danger py-4">Lỗi khi tải dữ liệu. Vui lòng thử lại.</div>';
   }
 })();
-
-// Page visibility: pause/resume animations when tab inactive
-document.addEventListener('visibilitychange', () => {
-  const orbs = document.querySelectorAll('.relife-orb');
-  const gradient = document.querySelector('.relife-gradient');
-  
-  if(document.hidden) {
-    orbs.forEach(orb => orb.style.animationPlayState = 'paused');
-    if(gradient) gradient.style.animationPlayState = 'paused';
-  } else {
-    orbs.forEach(orb => orb.style.animationPlayState = 'running');
-    if(gradient) gradient.style.animationPlayState = 'running';
-  }
-});
