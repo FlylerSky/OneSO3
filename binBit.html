@@ -1,0 +1,426 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Bin — Mã hóa / Giải mã bip</title>
+<style>
+  :root{--bg:#0f1724;--card:#0b1220;--accent:#22c55e;--muted:#94a3b8}
+  body{font-family:Inter,ui-sans-serif,system-ui,Arial;margin:0;background:linear-gradient(180deg,#071025 0%, #061327 100%);color:#e6eef6;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px}
+  .wrap{width:100%;max-width:980px;background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));padding:20px;border-radius:12px;box-shadow:0 6px 30px rgba(2,6,23,0.7)}
+  h1{margin:0 0 8px;font-size:20px}
+  p.lead{margin:0 0 16px;color:var(--muted);font-size:13px}
+  .row{display:flex;gap:12px;flex-wrap:wrap}
+  .col{flex:1;min-width:260px}
+  label{font-size:13px;color:var(--muted);display:block;margin-bottom:6px}
+  textarea,input,select{width:100%;box-sizing:border-box;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.04);background:transparent;color:inherit}
+  textarea{min-height:120px;resize:vertical}
+  button{background:var(--accent);color:#052018;border:0;padding:10px 14px;border-radius:8px;font-weight:600;cursor:pointer}
+  button.secondary{background:transparent;border:1px solid rgba(255,255,255,0.06);color:var(--muted)}
+  .controls{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+  .log{font-family:monospace;background:#061827;padding:10px;border-radius:8px;color:#bfe7c4;min-height:44px}
+  .small{font-size:12px;color:var(--muted)}
+  footer{margin-top:12px;font-size:12px;color:var(--muted)}
+  .row-2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  @media (max-width:700px){.row-2{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Bin — Mã hóa &amp; Giải mã bằng bip</h1>
+  <p class="lead">Nhập văn bản -> mã hóa thành dãy bip (1 = tiếng bip, 0 = im lặng). Có thể tải file WAV hoặc giải mã từ file/ghi âm.</p>
+
+  <div class="row-2">
+    <div>
+      <label>Văn bản đầu vào</label>
+      <textarea id="inputText" placeholder="Nhập văn bản...">Xin chào — thử mã hóa bip bằng Bin!</textarea>
+      <div class="controls">
+        <button id="encodeBtn">Mã hóa &amp; Phát</button>
+        <button id="downloadWavBtn" class="secondary" disabled>Tải WAV</button>
+        <label class="small">Tốc độ (ms/bit): <input id="bitMs" type="number" value="80" style="width:90px;margin-left:8px"></label>
+        <label class="small">Tần số (Hz): <input id="freq" type="number" value="1000" style="width:100px;margin-left:8px"></label>
+      </div>
+
+      <hr style="margin:12px 0;border:none;border-top:1px solid rgba(255,255,255,0.03)" />
+
+      <label>Giải mã (file âm thanh hoặc ghi âm)</label>
+      <div style="display:flex;gap:8px;align-items:center">
+        <input id="fileInput" type="file" accept="audio/*" />
+        <button id="recordBtn" class="secondary">Bắt đầu ghi</button>
+        <button id="stopRecordBtn" class="secondary" disabled>Dừng</button>
+      </div>
+      <div style="margin-top:8px" class="small">Hoặc kéo file WAV bạn đã tải lên đây.</div>
+      <div style="margin-top:8px" class="controls">
+        <button id="decodeBtn">Giải mã file/ghi âm</button>
+        <label class="small">Ngưỡng cảm nhận: <input id="threshold" type="number" value="0.30" step="0.01" style="width:84px;margin-left:8px"></label>
+      </div>
+    </div>
+
+    <div>
+      <label>Log / Kết quả</label>
+      <div class="log" id="log">Sẵn sàng.</div>
+
+      <hr style="margin:12px 0;border:none;border-top:1px solid rgba(255,255,255,0.03)" />
+
+      <label>Trình phát âm thanh</label>
+      <div style="display:flex;gap:8px;align-items:center;margin-top:8px">
+        <audio id="player" controls></audio>
+      </div>
+
+      <div style="margin-top:12px">
+        <strong>Ghi chú kỹ thuật</strong>
+        <ul class="small">
+          <li>Có header sync 16 bit (1010...) + 32-bit length (số byte, big-endian) trước dữ liệu để đồng bộ.</li>
+          <li>Mặc định dùng UTF-8 cho văn bản.</li>
+          <li>Nếu decoder không tìm thấy sync, thử tăng <em>bitMs</em> hoặc điều chỉnh ngưỡng.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <footer>Bin — simple audio bit encoder/decoder • Made for testing WebAudio</footer>
+</div>
+
+<script>
+/* ====== Utilities ====== */
+const enc = new TextEncoder();
+const dec = new TextDecoder();
+
+function bytesToBits(bytes){
+  const bits = [];
+  for (let b of bytes){
+    for (let i=7;i>=0;i--){ bits.push((b>>i)&1); }
+  }
+  return bits;
+}
+function bitsToBytes(bits){
+  const bytes = [];
+  for (let i=0;i<bits.length;i+=8){
+    let v = 0;
+    for (let j=0;j<8 && (i+j)<bits.length;j++){
+      v = (v<<1) | (bits[i+j]&1);
+    }
+    if ((i+8)>bits.length){
+      // pad remaining LSB zeros
+      v = v << (8 - (bits.length - i));
+    }
+    bytes.push(v);
+  }
+  return new Uint8Array(bytes);
+}
+function numberToBitsBE(num, bitsLen){
+  const arr = new Array(bitsLen).fill(0);
+  for (let i=bitsLen-1;i>=0;i--){
+    arr[i] = num & 1;
+    num = num >> 1;
+  }
+  return arr;
+}
+function bitsToNumberBE(bits){
+  let n = 0;
+  for (let b of bits){ n = (n<<1) | (b&1); }
+  return n;
+}
+
+/* ====== Header: 16-bit sync (1010...) + 32-bit length (bytes) ====== */
+function buildPacketBits(dataBytes){
+  const sync = [];
+  for (let i=0;i<16;i++){ sync.push(i%2===0?1:0); } // 101010...
+  const lenBits = numberToBitsBE(dataBytes.length, 32);
+  const dataBits = bytesToBits(dataBytes);
+  return sync.concat(lenBits, dataBits);
+}
+
+/* ====== Audio generation ====== */
+async function bitsToWavBlob(bits, bitMs=80, freq=1000, sampleRate=44100){
+  const samplesPerBit = Math.round(sampleRate * bitMs / 1000);
+  const totalSamples = samplesPerBit * bits.length;
+  const buffer = new Float32Array(totalSamples);
+  const angular = 2 * Math.PI * freq / sampleRate;
+  let pos = 0;
+  const amplitude = 0.8;
+  for (let bit of bits){
+    if (bit===1){
+      for (let s=0;s<samplesPerBit;s++){
+        buffer[pos++] = Math.sin(angular * s) * amplitude;
+      }
+    } else {
+      for (let s=0;s<samplesPerBit;s++){
+        buffer[pos++] = 0;
+      }
+    }
+  }
+  // Convert float buffer to WAV (16-bit PCM)
+  const wavBuffer = encodeWAV(buffer, sampleRate);
+  return new Blob([wavBuffer], {type: 'audio/wav'});
+}
+
+function encodeWAV(float32Array, sampleRate){
+  const samples = float32Array;
+  const buffer = new ArrayBuffer(44 + samples.length * 2);
+  const view = new DataView(buffer);
+
+  function writeString(view, offset, string){
+    for (let i=0;i<string.length;i++){
+      view.setUint8(offset+i, string.charCodeAt(i));
+    }
+  }
+  /* RIFF header */
+  writeString(view, 0, 'RIFF'); view.setUint32(4, 36 + samples.length * 2, true);
+  writeString(view, 8, 'WAVE'); writeString(view, 12, 'fmt ');
+  view.setUint32(16, 16, true); // PCM chunk size
+  view.setUint16(20, 1, true); // PCM format
+  view.setUint16(22, 1, true); // channels
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * 2, true); // byteRate
+  view.setUint16(32, 2, true); // blockAlign
+  view.setUint16(34, 16, true); // bitsPerSample
+  writeString(view, 36, 'data'); view.setUint32(40, samples.length * 2, true);
+
+  // write samples
+  let offset = 44;
+  for (let i=0;i<samples.length;i++, offset+=2){
+    let s = Math.max(-1, Math.min(1, samples[i]));
+    view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
+  }
+  return view;
+}
+
+/* ====== Decoder: analyze audio to bits ====== */
+function audioBufferToMonoData(audioBuffer){
+  const ch = audioBuffer.numberOfChannels > 0 ? audioBuffer.getChannelData(0) : new Float32Array(audioBuffer.length);
+  // if multi-channel, average
+  if (audioBuffer.numberOfChannels > 1){
+    const out = new Float32Array(audioBuffer.length);
+    for (let c=0;c<audioBuffer.numberOfChannels;c++){
+      const cd = audioBuffer.getChannelData(c);
+      for (let i=0;i<cd.length;i++) out[i] = (out[i] || 0) + cd[i];
+    }
+    for (let i=0;i<out.length;i++) out[i] /= audioBuffer.numberOfChannels;
+    return out;
+  } else {
+    return ch.slice();
+  }
+}
+
+// compute RMS for an array segment
+function rms(data, start, len){
+  let sum = 0;
+  const end = Math.min(start+len, data.length);
+  for (let i=start;i<end;i++){ const v=data[i]; sum += v*v; }
+  return Math.sqrt(sum / (end - start));
+}
+
+// Convert audio data -> rough bit array (0/1) using windowing and threshold
+function audioToRawBits(floatData, sampleRate, bitMs, threshold){
+  const samplesPerBit = Math.round(sampleRate * bitMs / 1000);
+  const rawBits = [];
+  for (let i=0;i<floatData.length;i+=samplesPerBit){
+    const v = rms(floatData, i, samplesPerBit);
+    rawBits.push(v);
+  }
+  // normalize energies to [0..1]
+  const max = Math.max(...rawBits);
+  const normalized = rawBits.map(x => x / (max||1));
+  const bits = normalized.map(x => x >= threshold ? 1 : 0);
+  return {bits, energies: normalized};
+}
+
+// search for sync (1010... 16 bits) in bit array; allow some tolerance via Hamming
+function findSync(bits){
+  const target = [];
+  for (let i=0;i<16;i++) target.push(i%2===0?1:0);
+  for (let i=0;i<=bits.length - target.length;i++){
+    let ok = true;
+    for (let j=0;j<target.length;j++){
+      if (bits[i+j] !== target[j]) { ok = false; break; }
+    }
+    if (ok) return i;
+  }
+  return -1;
+}
+
+/* ====== DOM & flow ====== */
+const inputText = document.getElementById('inputText');
+const encodeBtn = document.getElementById('encodeBtn');
+const downloadWavBtn = document.getElementById('downloadWavBtn');
+const player = document.getElementById('player');
+const logEl = document.getElementById('log');
+const bitMsInput = document.getElementById('bitMs');
+const freqInput = document.getElementById('freq');
+const fileInput = document.getElementById('fileInput');
+const decodeBtn = document.getElementById('decodeBtn');
+const thresholdInput = document.getElementById('threshold');
+const recordBtn = document.getElementById('recordBtn');
+const stopRecordBtn = document.getElementById('stopRecordBtn');
+
+let lastWavBlob = null;
+let mediaRecorder = null;
+let recordedChunks = [];
+
+// helper log
+function log(msg){
+  logEl.textContent = msg;
+  console.log(msg);
+}
+
+/* Encode & play */
+encodeBtn.addEventListener('click', async ()=>{
+  const text = inputText.value || '';
+  const bitMs = Number(bitMsInput.value) || 80;
+  const freq = Number(freqInput.value) || 1000;
+  log('Mã hóa: chuyển văn bản -> bytes (UTF-8) ...');
+  const dataBytes = enc.encode(text);
+  const packetBits = buildPacketBits(dataBytes);
+  log(`Dài bytes: ${dataBytes.length}, tổng bits (gồm header): ${packetBits.length}. Tạo âm thanh...`);
+  const wavBlob = await bitsToWavBlob(packetBits, bitMs, freq, 44100);
+  lastWavBlob = wavBlob;
+  const url = URL.createObjectURL(wavBlob);
+  player.src = url;
+  player.play().catch(()=>{});
+  downloadWavBtn.disabled = false;
+  log(`Đã tạo âm thanh. Nhấn play để nghe. (bitMs=${bitMs}ms, freq=${freq}Hz)`);
+});
+
+/* Download WAV */
+downloadWavBtn.addEventListener('click', ()=>{
+  if (!lastWavBlob) return;
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(lastWavBlob);
+  a.download = 'bin_bip.wav';
+  a.click();
+});
+
+/* Decode from file / player buffer */
+async function decodeFromAudioBuffer(audioBuffer){
+  log('Giải mã: phân tích audio buffer ...');
+  const floatData = audioBufferToMonoData(audioBuffer);
+  const sampleRate = audioBuffer.sampleRate;
+  const bitMs = Number(bitMsInput.value) || 80;
+  const threshold = Number(thresholdInput.value) || 0.30;
+  const {bits: rawBits, energies} = audioToRawBits(floatData, sampleRate, bitMs, threshold);
+
+  log(`Tổng ô (samples per bit) = ${rawBits.length}. Tìm sync...`);
+  let syncIndex = findSync(rawBits);
+  if (syncIndex < 0){
+    // try lowering threshold adaptively: (attempt two more tries)
+    log('Không tìm thấy sync với ngưỡng hiện tại. Thử dò ngưỡng tự động...');
+    // try thresholds 0.15 -> 0.5
+    let found = -1;
+    for (let t=0.15;t<=0.50;t+=0.05){
+      const attemptBits = audioToRawBits(floatData, sampleRate, bitMs, t).bits;
+      if ((found = findSync(attemptBits))>=0){
+        syncIndex = found;
+        log(`Tìm thấy sync với threshold=${t.toFixed(2)} tại ô ${found}`);
+        break;
+      }
+    }
+  } else {
+    log(`Tìm thấy sync tại ô ${syncIndex}`);
+  }
+
+  if (syncIndex < 0){
+    log('Không thể tìm thấy header sync. Hãy thử tăng bitMs, giảm tốc độ, hoặc điều chỉnh ngưỡng.');
+    return;
+  }
+
+  // read 32-bit length following sync
+  const startLen = syncIndex + 16;
+  if (startLen + 32 > rawBits.length){
+    log('File quá ngắn để đọc độ dài. Có thể bị cắt.');
+    return;
+  }
+  const lenBits = rawBits.slice(startLen, startLen+32);
+  const dataLen = bitsToNumberBE(lenBits);
+  const dataStart = startLen + 32;
+  const expectedBits = dataLen * 8;
+  if (dataStart + expectedBits > rawBits.length){
+    log(`Dữ liệu báo độ dài ${dataLen} bytes nhưng audio chỉ có đủ ${rawBits.length - dataStart} ô (${Math.floor((rawBits.length - dataStart)/8)} bytes).`);
+    // we'll attempt to read as many as available
+  }
+  const rawDataBits = rawBits.slice(dataStart, dataStart + expectedBits);
+  const bytes = bitsToBytes(rawDataBits);
+  try{
+    const text = dec.decode(bytes);
+    log(`Giải mã thành công — ${bytes.length} bytes -> "${text}"`);
+  }catch(e){
+    log('Giải mã byte -> text lỗi (UTF-8?). Hiện raw bytes: ' + bytes.length + ' bytes');
+  }
+}
+
+/* decode button -> uses fileInput if present, otherwise tries to fetch player src */
+decodeBtn.addEventListener('click', async ()=>{
+  // prefer file input
+  const file = fileInput.files && fileInput.files[0];
+  if (file){
+    log('Đang đọc file âm thanh...');
+    const arrayBuffer = await file.arrayBuffer();
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+    await decodeFromAudioBuffer(audioBuffer);
+    return;
+  }
+  // else if player has src pointing to blob
+  if (player.src){
+    try{
+      const resp = await fetch(player.src);
+      const ab = await resp.arrayBuffer();
+      const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      const audioBuffer = await audioCtx.decodeAudioData(ab);
+      await decodeFromAudioBuffer(audioBuffer);
+      return;
+    }catch(e){
+      log('Không thể đọc từ player.src: ' + e);
+    }
+  }
+  log('Không có file âm thanh nào được chọn. Hãy chọn file hoặc phát âm thanh bằng Encode trước.');
+});
+
+/* ====== Recording via microphone ====== */
+recordBtn.addEventListener('click', async ()=>{
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+    log('Trình duyệt không hỗ trợ getUserMedia.');
+    return;
+  }
+  try{
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    mediaRecorder = new MediaRecorder(stream);
+    recordedChunks = [];
+    mediaRecorder.ondataavailable = e => { if (e.data.size>0) recordedChunks.push(e.data); };
+    mediaRecorder.onstop = async ()=>{
+      const blob = new Blob(recordedChunks, {type: 'audio/webm'});
+      // convert blob -> arrayBuffer -> decode
+      const arrayBuffer = await blob.arrayBuffer();
+      const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      try{
+        const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+        // set player to recorded audio
+        const recordedUrl = URL.createObjectURL(blob);
+        player.src = recordedUrl;
+        await decodeFromAudioBuffer(audioBuffer);
+      }catch(e){
+        log('Không thể decode audio từ bản ghi: ' + e);
+      }
+    };
+    mediaRecorder.start();
+    recordBtn.disabled = true;
+    stopRecordBtn.disabled = false;
+    log('Đang ghi âm... Nhấn "Dừng" để hoàn tất và giải mã.');
+  }catch(e){
+    log('Lỗi khi xin quyền micro: ' + e);
+  }
+});
+stopRecordBtn.addEventListener('click', ()=>{
+  if (mediaRecorder && mediaRecorder.state === 'recording'){
+    mediaRecorder.stop();
+    recordBtn.disabled = false;
+    stopRecordBtn.disabled = true;
+    log('Dừng ghi, đang xử lý bản ghi...');
+  }
+});
+
+/* Init */
+log('Sẵn sàng. Nhập văn bản và nhấn "Mã hóa & Phát".');
+</script>
+</body>
+</html>

@@ -5,13 +5,7 @@ import { getFirestore } from "https://www.gstatic.com/firebasejs/9.22.2/firebase
 
 export function initFirebase() {
   const firebaseConfig = {
-  apiKey: "",
-  authDomain: "",
-  projectId: "",
-  storageBucket: "",
-  messagingSenderId: "",
-  appId: "",
-  measurementId: ""
+  
 };
 
   const app = initializeApp(firebaseConfig);

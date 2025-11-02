@@ -17,3 +17,14 @@ ui-avatars.com (avatar placeholder service used in UI)
 
 Hosting: Vercel
 Version control / source repository: GitHub
+
+
+
+
+
+
+
+
+
+
+<p><img src="https://i.ibb.co/PvTkYN79/In-Shot-20251009-061945163.jpg"></p>

@@ -1,4 +1,5 @@
-// JS/post.js (module)
+// JS/post.js - Relife UI 1.0 Enhanced
+// Optimized for Liquid Glass Design System with full Quill support
 import { initFirebase } from '../firebase-config.js';
 import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-auth.js";
 import {
@@ -11,11 +12,32 @@ const auth = getAuth();
 const params = new URLSearchParams(location.search);
 const postId = params.get('id');
 const postArea = document.getElementById('postArea');
+const commentsSection = document.getElementById('commentsSection');
 const hiddenRenderer = document.getElementById('__qs_hidden_renderer');
 
+// Utility functions
 const esc = s => String(s||'').replace(/[&<>\"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',"'":'&#39;'}[m]));
-const fmtDate = ts => { try { return ts?.toDate ? ts.toDate().toLocaleString('vi-VN') : ''; } catch { return ''; } };
+const fmtDate = ts => { 
+  try {
+    if(!ts?.toDate) return '';
+    const date = ts.toDate();
+    const now = new Date();
+    const diff = now - date;
+    const minutes = Math.floor(diff / 60000);
+    const hours = Math.floor(diff / 3600000);
+    const days = Math.floor(diff / 86400000);
+    
+    if(minutes < 1) return 'Vừa xong';
+    if(minutes < 60) return `${minutes} phút trước`;
+    if(hours < 24) return `${hours} giờ trước`;
+    if(days < 7) return `${days} ngày trước`;
+    return date.toLocaleDateString('vi-VN');
+  } catch { 
+    return ''; 
+  }
+};
 
+// DOMPurify config
 const PURIFY_CFG_ALLOW_CLASS = {
   ADD_TAGS: ['iframe','table','thead','tbody','tfoot','tr','td','th','video','source','figure','figcaption','caption','pre','code','span','ul','ol','li'],
   ADD_ATTR: ['style','class','id','width','height','allow','allowfullscreen','frameborder','controls','playsinline','loading','referrerpolicy','sandbox','data-*','src','srcdoc'],
@@ -23,7 +45,10 @@ const PURIFY_CFG_ALLOW_CLASS = {
   KEEP_CONTENT: false
 };
 
-function inlineComputedStyles(root){
+/**
+ * Inline computed styles for rendering
+ */
+function inlineComputedStyles(root) {
   if(!root) return;
   const walk = el => {
     if(el.nodeType !== 1) return;
@@ -45,7 +70,10 @@ function inlineComputedStyles(root){
   walk(root);
 }
 
-async function renderDeltaPreserveStyles(delta){
+/**
+ * Render Delta format (preserve styles)
+ */
+async function renderDeltaPreserveStyles(delta) {
   hiddenRenderer.style.display = 'block';
   hiddenRenderer.innerHTML = '';
   const temp = document.createElement('div');
@@ -64,7 +92,10 @@ async function renderDeltaPreserveStyles(delta){
   return postProcessHtml(sanitized);
 }
 
-async function renderHtmlPreserveStyles(rawHtml){
+/**
+ * Render HTML format (preserve styles)
+ */
+async function renderHtmlPreserveStyles(rawHtml) {
   const sanitizedKeep = DOMPurify.sanitize(rawHtml, PURIFY_CFG_ALLOW_CLASS);
   hiddenRenderer.style.display = 'block';
   hiddenRenderer.innerHTML = `<div class="ql-editor">${sanitizedKeep}</div>`;
@@ -78,119 +109,33 @@ async function renderHtmlPreserveStyles(rawHtml){
 }
 
 /**
- * postProcessHtml:
- * - Strip quill UI bits
- * - Normalize Quill list output (handles <p class="ql-list"...>, and also <ol><li data-list="bullet"> cases)
- * - Wrap iframes and tables for responsiveness.
+ * Post-process HTML: normalize lists, wrap media, etc.
  */
-function postProcessHtml(sanitizedHtml){
+function postProcessHtml(sanitizedHtml) {
   const wrapper = document.createElement('div');
   wrapper.innerHTML = sanitizedHtml;
 
-  // 1) Remove Quill UI helper spans (<span class="ql-ui"...>) which break list markup
+  // Remove Quill UI spans
   wrapper.querySelectorAll('span.ql-ui').forEach(el => el.remove());
 
-  // 2) Normalize Quill 'p' or other block nodes that represent lists
-  (function normalizeQuillParagraphLists(container){
-    if(!container) return;
-    const qlNodes = Array.from(container.querySelectorAll('.ql-list'));
-    const processed = new Set();
-    for(const node of qlNodes){
-      if(processed.has(node)) continue;
-      if(node.closest('ul,ol')) { processed.add(node); continue; }
-      const listType = (node.getAttribute && node.getAttribute('data-list')) || 'bullet';
-      const tagName = /order|ordered|number/i.test(listType) ? 'ol' : 'ul';
-      const items = [];
-      let cur = node;
-      while(cur && cur.classList && cur.classList.contains('ql-list') && ((cur.getAttribute && (cur.getAttribute('data-list') || 'bullet')) === listType)){
-        items.push(cur);
-        processed.add(cur);
-        cur = cur.nextElementSibling;
-      }
-      if(items.length){
-        const listEl = document.createElement(tagName);
-        for(const itemNode of items){
-          const li = document.createElement('li');
-          li.innerHTML = itemNode.innerHTML;
-          listEl.appendChild(li);
-          itemNode.parentNode && itemNode.parentNode.removeChild(itemNode);
-        }
-        if(cur && cur.parentNode){
-          cur.parentNode.insertBefore(listEl, cur);
-        } else {
-          container.appendChild(listEl);
-        }
-      }
-    }
-  })(wrapper);
+  // Normalize Quill paragraph lists
+  normalizeQuillParagraphLists(wrapper);
+  
+  // Fix list container types
+  fixListContainerTypes(wrapper);
 
-  // 3) Handle cases like: <ol><li data-list="bullet">...</li></ol>  => convert container ol->ul
-  (function fixListContainerTypes(container){
-    if(!container) return;
-    const liNodes = Array.from(container.querySelectorAll('li[data-list]'));
-    for(const li of liNodes){
-      const dataList = (li.getAttribute('data-list') || '').toLowerCase();
-      const desiredTag = /order|ordered|number/i.test(dataList) ? 'ol' : 'ul';
-      const parent = li.parentElement;
-      if(!parent) continue;
-      const parentTag = parent.tagName.toLowerCase();
-      if(parentTag === desiredTag){
-        continue;
-      }
-      const siblings = [];
-      let prev = li.previousElementSibling;
-      while(prev && prev.tagName.toLowerCase() === 'li' && (prev.getAttribute && prev.getAttribute('data-list') || '') === (li.getAttribute('data-list') || '')){
-        prev = prev.previousElementSibling;
-      }
-      let cur = prev ? prev.nextElementSibling : parent.firstElementChild;
-      while(cur && cur.tagName.toLowerCase() === 'li' && (cur.getAttribute && cur.getAttribute('data-list') || '') === (li.getAttribute('data-list') || '')){
-        siblings.push(cur);
-        cur = cur.nextElementSibling;
-      }
-      if(siblings.length){
-        const newList = document.createElement(desiredTag);
-        for(const item of siblings){
-          const newLi = document.createElement('li');
-          newLi.innerHTML = item.innerHTML;
-          newList.appendChild(newLi);
-          item.parentNode && item.parentNode.removeChild(item);
-        }
-        const insertBeforeNode = cur || null;
-        if(insertBeforeNode && insertBeforeNode.parentNode){
-          insertBeforeNode.parentNode.insertBefore(newList, insertBeforeNode);
-        } else {
-          parent.parentNode.insertBefore(newList, parent.nextSibling);
-        }
-      }
-      if(parent && parent.children.length === 0 && parent.parentNode){
-        parent.parentNode.removeChild(parent);
-      }
-    }
-  })(wrapper);
-
-  // 4) Wrap iframes into responsive wrapper and tables into scroll wrappers
+  // Wrap iframes
   wrapper.querySelectorAll('iframe').forEach(iframe => {
     const src = iframe.getAttribute('src') || iframe.src || '';
-    if(!src || src.trim() === '') {
-      return;
-    }
+    if(!src || src.trim() === '') return;
     if(iframe.closest('.iframe-wrapper')) return;
-    const widthAttr = iframe.getAttribute('width') || iframe.style.width || '';
-    const needsWrap = !widthAttr || widthAttr.includes('%') || widthAttr === '100%';
-    if(needsWrap){
-      const container = document.createElement('div');
-      container.className = 'iframe-wrapper';
-      if(iframe.hasAttribute('sandbox')) {
-        container.setAttribute('data-has-sandbox', '1');
-      }
-      iframe.parentNode.replaceChild(container, iframe);
-      container.appendChild(iframe);
-    } else {
-      iframe.style.maxWidth = '100%';
-      iframe.style.display = 'block';
-    }
+    const container = document.createElement('div');
+    container.className = 'iframe-wrapper';
+    iframe.parentNode.replaceChild(container, iframe);
+    container.appendChild(iframe);
   });
 
+  // Wrap tables
   wrapper.querySelectorAll('table').forEach(tbl => {
     if(tbl.closest('.table-wrapper')) return;
     const w = document.createElement('div');
@@ -199,13 +144,13 @@ function postProcessHtml(sanitizedHtml){
     w.appendChild(tbl);
   });
 
-  // 5) Ensure links open in new tab and are safe
+  // Ensure links open in new tab
   wrapper.querySelectorAll('a').forEach(a => {
     if(!a.target) a.setAttribute('target','_blank');
     if(!a.rel) a.setAttribute('rel','noopener noreferrer');
   });
 
-  // 6) Remove leftover data-list attributes (optional cosmetic cleanup)
+  // Remove leftover data-list attributes
   wrapper.querySelectorAll('[data-list]').forEach(el => {
     el.removeAttribute('data-list');
   });
@@ -213,45 +158,104 @@ function postProcessHtml(sanitizedHtml){
   return wrapper.innerHTML;
 }
 
-/* ========================= Performance-focused Image Viewer =========================
-   Uses rAF smoothing, pointer events, touch pinch and SVG icons.
-*/
-function createImageViewerElements_perf(){
+function normalizeQuillParagraphLists(container) {
+  if(!container) return;
+  const qlNodes = Array.from(container.querySelectorAll('.ql-list'));
+  const processed = new Set();
+  for(const node of qlNodes) {
+    if(processed.has(node)) continue;
+    if(node.closest('ul,ol')) { processed.add(node); continue; }
+    const listType = (node.getAttribute && node.getAttribute('data-list')) || 'bullet';
+    const tagName = /order|ordered|number/i.test(listType) ? 'ol' : 'ul';
+    const items = [];
+    let cur = node;
+    while(cur && cur.classList && cur.classList.contains('ql-list') && ((cur.getAttribute && (cur.getAttribute('data-list') || 'bullet')) === listType)) {
+      items.push(cur);
+      processed.add(cur);
+      cur = cur.nextElementSibling;
+    }
+    if(items.length) {
+      const listEl = document.createElement(tagName);
+      for(const itemNode of items) {
+        const li = document.createElement('li');
+        li.innerHTML = itemNode.innerHTML;
+        listEl.appendChild(li);
+        itemNode.parentNode && itemNode.parentNode.removeChild(itemNode);
+      }
+      if(cur && cur.parentNode) {
+        cur.parentNode.insertBefore(listEl, cur);
+      } else {
+        container.appendChild(listEl);
+      }
+    }
+  }
+}
+
+function fixListContainerTypes(container) {
+  if(!container) return;
+  const liNodes = Array.from(container.querySelectorAll('li[data-list]'));
+  for(const li of liNodes) {
+    const dataList = (li.getAttribute('data-list') || '').toLowerCase();
+    const desiredTag = /order|ordered|number/i.test(dataList) ? 'ol' : 'ul';
+    const parent = li.parentElement;
+    if(!parent) continue;
+    const parentTag = parent.tagName.toLowerCase();
+    if(parentTag === desiredTag) continue;
+    
+    const siblings = [];
+    let prev = li.previousElementSibling;
+    while(prev && prev.tagName.toLowerCase() === 'li' && (prev.getAttribute && prev.getAttribute('data-list') || '') === (li.getAttribute('data-list') || '')) {
+      prev = prev.previousElementSibling;
+    }
+    let cur = prev ? prev.nextElementSibling : parent.firstElementChild;
+    while(cur && cur.tagName.toLowerCase() === 'li' && (cur.getAttribute && cur.getAttribute('data-list') || '') === (li.getAttribute('data-list') || '')) {
+      siblings.push(cur);
+      cur = cur.nextElementSibling;
+    }
+    if(siblings.length) {
+      const newList = document.createElement(desiredTag);
+      for(const item of siblings) {
+        const newLi = document.createElement('li');
+        newLi.innerHTML = item.innerHTML;
+        newList.appendChild(newLi);
+        item.parentNode && item.parentNode.removeChild(item);
+      }
+      const insertBeforeNode = cur || null;
+      if(insertBeforeNode && insertBeforeNode.parentNode) {
+        insertBeforeNode.parentNode.insertBefore(newList, insertBeforeNode);
+      } else {
+        parent.parentNode.insertBefore(newList, parent.nextSibling);
+      }
+    }
+    if(parent && parent.children.length === 0 && parent.parentNode) {
+      parent.parentNode.removeChild(parent);
+    }
+  }
+}
+
+/**
+ * Render content (auto-detect format)
+ */
+async function renderContent(rawContent) {
+  if(!rawContent && rawContent !== '') return '<div class="text-muted" style="white-space:pre-wrap;">(Không có nội dung)</div>';
+  if(typeof rawContent === 'object') return await renderDeltaPreserveStyles(rawContent);
+  const str = String(rawContent).trim();
+  if(str.startsWith('<')) return await renderHtmlPreserveStyles(rawContent);
+  try {
+    const parsed = JSON.parse(str);
+    if((parsed && parsed.ops && Array.isArray(parsed.ops)) || (Array.isArray(parsed) && parsed.length)) return await renderDeltaPreserveStyles(parsed);
+  } catch(e){}
+  return `<div style="white-space:pre-wrap;">${esc(rawContent)}</div>`;
+}
+
+/**
+ * Image Viewer (Performance-optimized)
+ */
+function createImageViewerElements() {
   const existing = document.getElementById('os-image-viewer');
   if(existing && existing._perfApi) return existing._perfApi;
 
-  const overlay = document.createElement('div');
-  overlay.id = 'os-image-viewer';
-  overlay.className = 'os-viewer-overlay';
-  overlay.innerHTML = `
-    <div class="os-viewer-inner" role="dialog" aria-modal="true" tabindex="-1">
-      <img class="os-viewer-img" alt="One Social image viewer">
-      <div class="os-viewer-controls" aria-hidden="false">
-        <button data-action="zoom-in" title="Zoom in" aria-label="Zoom in">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M12 5v14M5 12h14"/></svg>
-        </button>
-        <button data-action="zoom-out" title="Zoom out" aria-label="Zoom out">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M5 12h14"/></svg>
-        </button>
-        <button data-action="fit" title="Fit to screen" aria-label="Fit to screen">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M3 12h3M18 12h3M12 3v3M12 18v3"/></svg>
-        </button>
-        <a data-action="download" title="Tải xuống" href="#" download style="text-decoration:none;">
-          <button type="button" title="Tải xuống" aria-label="Download">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M7 10l5 5 5-5M12 15V3"/></svg>
-          </button>
-        </a>
-        <button data-action="close" title="Đóng" aria-label="Close">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M18 6L6 18M6 6l12 12"/></svg>
-        </button>
-      </div>
-      <div class="os-viewer-zoom-indicator" aria-hidden="true">100%</div>
-      <div class="os-viewer-hint">Kéo để di chuyển — Cuộn để phóng to/thu nhỏ — Esc để đóng</div>
-    </div>
-  `;
-
-  document.body.appendChild(overlay);
-
+  const overlay = existing || document.getElementById('os-image-viewer');
   const inner = overlay.querySelector('.os-viewer-inner');
   const img = overlay.querySelector('.os-viewer-img');
   const controls = overlay.querySelector('.os-viewer-controls');
@@ -263,48 +267,47 @@ function createImageViewerElements_perf(){
   const SMOOTH = 0.18;
   let rafId = null;
 
-  function rafLoop(){
+  function rafLoop() {
     let changed = false;
-    if(Math.abs(rendered.scale - target.scale) > 0.001){
+    if(Math.abs(rendered.scale - target.scale) > 0.001) {
       rendered.scale += (target.scale - rendered.scale) * SMOOTH;
       changed = true;
-    } else if(rendered.scale !== target.scale){
+    } else if(rendered.scale !== target.scale) {
       rendered.scale = target.scale; changed = true;
     }
-    if(Math.abs(rendered.tx - target.tx) > 0.5){
+    if(Math.abs(rendered.tx - target.tx) > 0.5) {
       rendered.tx += (target.tx - rendered.tx) * SMOOTH; changed = true;
-    } else if(rendered.tx !== target.tx){
+    } else if(rendered.tx !== target.tx) {
       rendered.tx = target.tx; changed = true;
     }
-    if(Math.abs(rendered.ty - target.ty) > 0.5){
+    if(Math.abs(rendered.ty - target.ty) > 0.5) {
       rendered.ty += (target.ty - rendered.ty) * SMOOTH; changed = true;
-    } else if(rendered.ty !== target.ty){
+    } else if(rendered.ty !== target.ty) {
       rendered.ty = target.ty; changed = true;
     }
 
-    if(changed){
+    if(changed) {
       img.style.transform = `translate3d(${rendered.tx}px, ${rendered.ty}px, 0) scale(${rendered.scale})`;
       zoomIndicator.textContent = `${Math.round(rendered.scale * 100)}%`;
     }
     rafId = requestAnimationFrame(rafLoop);
   }
 
-  function clamp(v, a, b){ return Math.max(a, Math.min(b, v)); }
+  function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
 
-  function resetToFit(){
+  function resetToFit() {
     const rect = img.getBoundingClientRect();
     const containerRect = inner.getBoundingClientRect();
     target.scale = 1;
-    target.tx = (containerRect.width - rect.width)/2;
-    target.ty = (containerRect.height - rect.height)/2;
+    target.tx = (containerRect.width - rect.width) / 2;
+    target.ty = (containerRect.height - rect.height) / 2;
   }
 
-  function open(src){
+  function open(src) {
     if(!src) return;
     overlay.classList.add('open');
     document.body.style.overflow = 'hidden';
     img.src = src;
-    img.style.transition = 'none';
     img.onload = () => {
       target.scale = 1;
       rendered.scale = 1; rendered.tx = 0; rendered.ty = 0;
@@ -318,35 +321,30 @@ function createImageViewerElements_perf(){
         const url = new URL(src, location.href);
         const fn = url.pathname.split('/').pop() || 'image';
         downloadAnchor.setAttribute('download', fn);
-      } catch(e){
+      } catch(e) {
         downloadAnchor.removeAttribute('download');
       }
       overlay.focus();
     };
   }
 
-  function close(){
+  function close() {
     overlay.classList.remove('open');
     document.body.style.overflow = '';
-    if(rafId){ cancelAnimationFrame(rafId); rafId = null; }
+    if(rafId) { cancelAnimationFrame(rafId); rafId = null; }
     img.src = '';
     target = { scale: 1, tx: 0, ty: 0 };
     rendered = { scale: 1, tx: 0, ty: 0 };
   }
 
-  overlay.addEventListener('pointerdown', ev => {
-    if(!overlay.classList.contains('open')) return;
-    ev.preventDefault();
-  }, { passive: false });
-
   controls.addEventListener('click', ev => {
     ev.stopPropagation();
     const action = ev.target.closest('[data-action]')?.getAttribute('data-action');
     if(!action) return;
-    if(action === 'zoom-in'){ target.scale = clamp(target.scale * 1.25, 0.2, 6); }
-    else if(action === 'zoom-out'){ target.scale = clamp(target.scale / 1.25, 0.2, 6); }
-    else if(action === 'fit'){ resetToFit(); }
-    else if(action === 'close'){ close(); }
+    if(action === 'zoom-in') { target.scale = clamp(target.scale * 1.25, 0.2, 6); }
+    else if(action === 'zoom-out') { target.scale = clamp(target.scale / 1.25, 0.2, 6); }
+    else if(action === 'fit') { resetToFit(); }
+    else if(action === 'close') { close(); }
   });
 
   overlay.addEventListener('click', ev => {
@@ -406,248 +404,403 @@ function createImageViewerElements_perf(){
     img.style.cursor = 'grab';
   });
 
-  let lastTouchDist = 0;
-  overlay.addEventListener('touchstart', ev => {
-    if(!overlay.classList.contains('open')) return;
-    if(ev.touches.length === 2){
-      ev.preventDefault();
-      lastTouchDist = Math.hypot(ev.touches[0].clientX - ev.touches[1].clientX, ev.touches[0].clientY - ev.touches[1].clientY);
-    }
-  }, { passive: false });
-
-  overlay.addEventListener('touchmove', ev => {
-    if(!overlay.classList.contains('open')) return;
-    if(ev.touches.length === 2){
-      ev.preventDefault();
-      const d = Math.hypot(ev.touches[0].clientX - ev.touches[1].clientX, ev.touches[0].clientY - ev.touches[1].clientY);
-      if(lastTouchDist > 0){
-        const factor = d / lastTouchDist;
-        const midX = (ev.touches[0].clientX + ev.touches[1].clientX) / 2;
-        const midY = (ev.touches[0].clientY + ev.touches[1].clientY) / 2;
-        const rect = img.getBoundingClientRect();
-        const cx = midX - rect.left;
-        const cy = midY - rect.top;
-        const prevScale = target.scale;
-        const newScale = clamp(prevScale * factor, 0.2, 6);
-        const scaleRatio = newScale / prevScale;
-        target.tx = (target.tx - cx) * scaleRatio + cx;
-        target.ty = (target.ty - cy) * scaleRatio + cy;
-        target.scale = newScale;
-      }
-      lastTouchDist = d;
-    }
-  }, { passive: false });
-
-  overlay.addEventListener('touchend', ev => {
-    if(ev.touches.length === 0) lastTouchDist = 0;
-  });
-
   const api = { open, close, overlay, img };
   overlay._perfApi = api;
   return api;
 }
 
-function attachImageViewerToContent_perf(){
-  createImageViewerElements_perf();
+function attachImageViewerToContent() {
+  createImageViewerElements();
   document.addEventListener('click', (ev) => {
     const target = ev.target;
     if(!target) return;
     const inPost = target.closest && target.closest('#postContentContainer');
-    if(inPost && target.tagName && target.tagName.toLowerCase() === 'img'){
+    if(inPost && target.tagName && target.tagName.toLowerCase() === 'img') {
       ev.preventDefault();
       const src = target.getAttribute('data-full') || target.src || target.getAttribute('data-src') || '';
       const overlayEl = document.getElementById('os-image-viewer');
-      if(overlayEl && overlayEl._perfApi && overlayEl._perfApi.open){
+      if(overlayEl && overlayEl._perfApi && overlayEl._perfApi.open) {
         overlayEl._perfApi.open(src);
-      } else {
-        const api2 = createImageViewerElements_perf();
-        const overlayNow = document.getElementById('os-image-viewer');
-        if(overlayNow) overlayNow._perfApi = api2;
-        api2.open(src);
       }
     }
   }, false);
 }
 
-(function ensureViewerPerfAttached(){
-  const el = document.getElementById('os-image-viewer');
-  if(!el){
-    const a = createImageViewerElements_perf();
-    const overlay = document.getElementById('os-image-viewer');
-    if(overlay) overlay._perfApi = a;
-  } else {
-    if(!el._perfApi) el._perfApi = createImageViewerElements_perf();
+/**
+ * Load and render post
+ */
+async function load() {
+  if(!postId) {
+    postArea.innerHTML = `
+      <div class="relife-glass-card">
+        <div class="text-center text-muted py-5">
+          <i class="bi bi-exclamation-circle" style="font-size: 3rem; margin-bottom: 1rem;"></i>
+          <div>ID bài viết không hợp lệ.</div>
+          <a href="index.html" class="relife-btn-primary mt-3">Về trang chủ</a>
+        </div>
+      </div>
+    `;
+    return;
   }
-})();
 
-/* ========================= end image viewer ========================= */
-
-async function renderContent(rawContent){
-  if(!rawContent && rawContent !== '') return '<div style="white-space:pre-wrap;color:#6c757d;">(Không có nội dung)</div>';
-  if(typeof rawContent === 'object') return await renderDeltaPreserveStyles(rawContent);
-  const str = String(rawContent).trim();
-  if(str.startsWith('<')) return await renderHtmlPreserveStyles(rawContent);
   try {
-    const parsed = JSON.parse(str);
-    if((parsed && parsed.ops && Array.isArray(parsed.ops)) || (Array.isArray(parsed) && parsed.length)) return await renderDeltaPreserveStyles(parsed);
-  } catch(e){}
-  return `<div style="white-space:pre-wrap;">${esc(rawContent)}</div>`;
+    const snap = await getDoc(doc(db, 'posts', postId));
+    if(!snap.exists()) {
+      postArea.innerHTML = `
+        <div class="relife-glass-card">
+          <div class="text-center text-muted py-5">
+            <i class="bi bi-file-earmark-x" style="font-size: 3rem; margin-bottom: 1rem;"></i>
+            <div>Không tìm thấy bài viết</div>
+            <a href="index.html" class="relife-btn-primary mt-3">Về trang chủ</a>
+          </div>
+        </div>
+      `;
+      return;
+    }
+
+    const d = snap.data();
+
+    // Get author info
+    let authorHtml = '';
+    let authorAvatar = '';
+    if(d.userId) {
+      const userSnap = await getDoc(doc(db, 'users', d.userId));
+      const prof = userSnap.exists() ? userSnap.data() : null;
+      authorAvatar = prof?.avatarUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(prof?.displayName||d.displayName||'U')}&background=0D6EFD&color=fff&size=128`;
+      const tag = prof?.tagName || d.authorTag || '';
+      authorHtml = `
+        <div class="relife-post-header">
+          <img src="${authorAvatar}" class="relife-author-avatar" alt="avatar">
+          <div class="relife-author-info">
+            <div class="relife-author-name">${esc(d.displayName || prof?.displayName || 'Người dùng')}</div>
+            <div class="relife-author-meta">
+              ${tag ? `<div class="relife-author-tag">${esc(tag)}</div>` : ''}
+              <div class="relife-post-time">
+                <i class="bi bi-clock"></i>
+                <span>${fmtDate(d.createdAt)}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+    } else {
+      authorAvatar = `https://ui-avatars.com/api/?name=${encodeURIComponent(d.displayName||'T')}&background=FFC107&color=000&size=128`;
+      authorHtml = `
+        <div class="relife-post-header">
+          <img src="${authorAvatar}" class="relife-author-avatar" alt="avatar">
+          <div class="relife-author-info">
+            <div class="relife-author-name">${esc(d.displayName || 'Tài khoản thử nghiệm')}</div>
+            <div class="relife-author-meta">
+              <span class="relife-trial-badge">Tài khoản thử nghiệm</span>
+              <div class="relife-post-time">
+                <i class="bi bi-clock"></i>
+                <span>${fmtDate(d.createdAt)}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    // Render content
+    const raw = d.content || '';
+    let rendered = '';
+    try {
+      rendered = await renderContent(raw);
+    } catch(err) {
+      console.error('Render failed', err);
+      rendered = DOMPurify.sanitize(String(raw), PURIFY_CFG_ALLOW_CLASS);
+    }
+
+    // Hashtags
+    const hashtagsHtml = (d.hashtags||[]).map(h => 
+      `<a href="tag.html?tag=${encodeURIComponent(h)}" class="relife-hashtag">
+        <i class="bi bi-hash"></i>${esc(h.replace(/^#/, ''))}
+      </a>`
+    ).join('');
+
+    // Build post HTML
+    postArea.innerHTML = `
+      <div class="relife-glass-card">
+        ${authorHtml}
+        <h1 class="relife-post-title">${esc(d.title || 'Không có tiêu đề')}</h1>
+        ${hashtagsHtml ? `<div class="relife-hashtags">${hashtagsHtml}</div>` : ''}
+        <div id="postContentContainer" class="post-content">${rendered}</div>
+        
+        <div class="relife-reactions">
+          <button id="likeBtn" class="relife-reaction-btn">
+            <i class="bi bi-hand-thumbs-up-fill"></i>
+            <span id="likeCount">${d.likes||0}</span>
+          </button>
+          <button id="dislikeBtn" class="relife-reaction-btn">
+            <i class="bi bi-hand-thumbs-down-fill"></i>
+            <span id="dislikeCount">${d.dislikes||0}</span>
+          </button>
+          <button id="commentToggle" class="relife-reaction-btn">
+            <i class="bi bi-chat-dots-fill"></i>
+            <span id="commentCountBtn">${d.commentsCount||0}</span>
+          </button>
+        </div>
+      </div>
+    `;
+
+    // Attach image viewer
+    attachImageViewerToContent();
+
+    // Show comments section
+    commentsSection.style.display = 'block';
+    document.getElementById('commentCount').textContent = d.commentsCount || 0;
+
+    // Bind events
+    bindEvents();
+    watchRealtime();
+    updateReactionButtonsState();
+
+    // Smooth scroll animation
+    postArea.querySelector('.relife-glass-card').style.animation = 'fadeInUp 0.5s ease';
+
+  } catch(err) {
+    console.error('Load post error:', err);
+    postArea.innerHTML = `
+      <div class="relife-glass-card">
+        <div class="text-center text-danger py-5">
+          <i class="bi bi-exclamation-triangle" style="font-size: 3rem; margin-bottom: 1rem;"></i>
+          <div>Lỗi khi tải bài viết</div>
+          <small class="text-muted d-block mt-2">${esc(err.message || err)}</small>
+          <a href="index.html" class="relife-btn-primary mt-3">Về trang chủ</a>
+        </div>
+      </div>
+    `;
+  }
 }
 
-async function load(){
-  if(!postId){ postArea.innerHTML = '<div class="p-4 text-center text-muted">ID bài viết không hợp lệ. <a href="index.html">Về trang chính</a></div>'; return; }
-  const snap = await getDoc(doc(db,'posts',postId));
-  if(!snap.exists()){ postArea.innerHTML = '<div class="p-4 text-center text-muted">Không tìm thấy bài viết</div>'; return; }
-  const d = snap.data();
-
-  let authorHtml = '';
-  if(d.userId){
-    const userSnap = await getDoc(doc(db,'users',d.userId));
-    const prof = userSnap.exists() ? userSnap.data() : null;
-    const avatar = prof?.avatarUrl ? prof.avatarUrl : `https://ui-avatars.com/api/?name=${encodeURIComponent(prof?.displayName||d.displayName||'U')}&background=0D6EFD&color=fff&size=128`;
-    const tag = prof?.tagName || d.authorTag || '';
-    authorHtml = `<div class="d-flex align-items-center gap-2 mb-2"><img src="${avatar}" class="user-avatar" alt="avatar"><div><div class="fw-bold">${esc(d.displayName || prof?.displayName || 'Người dùng')}</div><div class="small-muted">${esc(tag)}</div></div></div>`;
-  } else {
-    authorHtml = `<div class="mb-2"><div class="fw-bold">${esc(d.displayName || 'Tài khoản thử nghiệm')}</div><div><span class="badge-trial">Tài khoản thử nghiệm</span></div></div>`;
-  }
-
-  const raw = d.content || '';
-  let rendered = '';
-  try {
-    rendered = await renderContent(raw);
-  } catch(err){
-    console.error('Render failed', err);
-    rendered = DOMPurify.sanitize(String(raw), PURIFY_CFG_ALLOW_CLASS);
-  }
-
-  const hashtagsHtml = (d.hashtags||[]).map(h=>`<a href="tag.html?tag=${encodeURIComponent(h)}" class="small-muted me-2">${esc(h)}</a>`).join(' ');
-
-  postArea.innerHTML = `
-    <div>${authorHtml}</div>
-    <h4>${esc(d.title || '')}</h4>
-    <div class="small-muted mb-2">${fmtDate(d.createdAt)}</div>
-    <hr>
-    <div id="postContentContainer" class="post-content mb-3">${rendered}</div>
-    <div class="mb-3">${hashtagsHtml}</div>
-
-    <div class="d-flex gap-2 align-items-center mb-3">
-      <button id="likeBtn" class="btn btn-outline-primary btn-sm btn-rounded"><i class="bi bi-hand-thumbs-up"></i> <span id="likeCount">${d.likes||0}</span></button>
-      <button id="dislikeBtn" class="btn btn-outline-danger btn-sm btn-rounded"><i class="bi bi-hand-thumbs-down"></i> <span id="dislikeCount">${d.dislikes||0}</span></button>
-      <button id="commentToggle" class="btn btn-outline-secondary btn-sm btn-rounded ms-2"><i class="bi bi-chat"></i> <span id="commentCount">${d.commentsCount||0}</span></button>
-      <button id="shareBtn" class="btn btn-outline-success btn-sm btn-rounded ms-auto"><i class="bi bi-share"></i> Chia sẻ</button>
-    </div>
-
-    <hr>
-    <h6>Bình luận</h6>
-    <div id="commentsList" class="mb-3"></div>
-    <div id="loginNotice" class="alert alert-warning" style="display:none;">Bạn cần đăng nhập để viết bình luận.</div>
-    <div id="commentFormArea" style="display:none;">
-      <textarea id="commentText" class="form-control mb-2" rows="3" placeholder="Viết bình luận..."></textarea>
-      <button id="sendComment" class="btn btn-primary btn-rounded w-100">Gửi</button>
-    </div>
-  `;
-
-  // Attach image viewer handler AFTER content is injected
-  attachImageViewerToContent_perf();
-
-  bindEvents();
-  watchRealtime();
-  updateReactionButtonsState();
-}
-
+/**
+ * Watch realtime updates
+ */
 let commentsUnsub = null;
-function watchRealtime(){
-  const commentsRef = collection(db,'posts',postId,'comments');
-  const q = query(commentsRef, orderBy('createdAt','desc'));
+function watchRealtime() {
+  // Watch comments
+  const commentsRef = collection(db, 'posts', postId, 'comments');
+  const q = query(commentsRef, orderBy('createdAt', 'desc'));
   if(commentsUnsub) commentsUnsub();
   commentsUnsub = onSnapshot(q, snap => {
-    const list = document.getElementById('commentsList'); list.innerHTML = '';
-    if(snap.empty){ list.innerHTML = '<div class="text-muted">Chưa có bình luận</div>'; return; }
-    snap.forEach(s => {
+    const list = document.getElementById('commentsList');
+    list.innerHTML = '';
+    if(snap.empty) {
+      list.innerHTML = '<div class="text-center text-muted py-3">Chưa có bình luận</div>';
+      return;
+    }
+    snap.forEach((s, idx) => {
       const c = s.data();
-      list.innerHTML += `<div class="mb-3"><div class="fw-bold">${esc(c.displayName||'')}</div><div class="small-muted">${fmtDate(c.createdAt)}</div><div class="comment-text">${esc(c.text)}</div><hr></div>`;
+      const avatar = `https://ui-avatars.com/api/?name=${encodeURIComponent(c.displayName||'U')}&background=0D6EFD&color=fff&size=80`;
+      const commentEl = document.createElement('div');
+      commentEl.className = 'relife-comment';
+      commentEl.style.animationDelay = `${idx * 0.05}s`;
+      commentEl.innerHTML = `
+        <div class="relife-comment-header">
+          <img src="${avatar}" class="relife-comment-avatar" alt="avatar">
+          <div class="relife-comment-author">
+            <div class="relife-comment-name">${esc(c.displayName||'Ẩn danh')}</div>
+            <div class="relife-comment-time">
+              <i class="bi bi-clock"></i>
+              <span>${fmtDate(c.createdAt)}</span>
+            </div>
+          </div>
+        </div>
+        <div class="relife-comment-text">${esc(c.text)}</div>
+      `;
+      list.appendChild(commentEl);
     });
   });
 
-  const postRef = doc(db,'posts',postId);
+  // Watch post counters
+  const postRef = doc(db, 'posts', postId);
   onSnapshot(postRef, snap => {
     const d = snap.data();
     if(!d) return;
     const likeEl = document.getElementById('likeCount');
     const disEl = document.getElementById('dislikeCount');
-    const comEl = document.getElementById('commentCount');
+    const comEl = document.getElementById('commentCountBtn');
+    const comBadge = document.getElementById('commentCount');
     if(likeEl) likeEl.textContent = d.likes || 0;
     if(disEl) disEl.textContent = d.dislikes || 0;
     if(comEl) comEl.textContent = d.commentsCount || 0;
+    if(comBadge) comBadge.textContent = d.commentsCount || 0;
   });
 }
 
-function bindEvents(){
-  document.getElementById('shareBtn').addEventListener('click', async ()=>{
-    try { await navigator.clipboard.writeText(location.href); const btn = document.getElementById('shareBtn'); const old = btn.innerHTML; btn.innerHTML = '<i class="bi bi-check-lg"></i> Đã sao chép'; setTimeout(()=> btn.innerHTML = old, 1200); } catch(e){ alert('Không thể sao chép URL'); }
+/**
+ * Bind event listeners
+ */
+function bindEvents() {
+  // Share button
+  document.getElementById('shareBtn').addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(location.href);
+      const btn = document.getElementById('shareBtn');
+      const oldHtml = btn.innerHTML;
+      btn.innerHTML = '<i class="bi bi-check-lg"></i>';
+      btn.style.background = 'rgba(52, 199, 89, 0.2)';
+      btn.style.color = '#34C759';
+      setTimeout(() => {
+        btn.innerHTML = oldHtml;
+        btn.style.background = '';
+        btn.style.color = '';
+      }, 1500);
+    } catch(e) {
+      alert('Không thể sao chép URL');
+    }
   });
 
-  document.getElementById('likeBtn').addEventListener('click', ()=> toggleReaction(postId, 'like'));
-  document.getElementById('dislikeBtn').addEventListener('click', ()=> toggleReaction(postId, 'dislike'));
-  document.getElementById('commentToggle').addEventListener('click', ()=> { const area = document.getElementById('commentFormArea'); area.scrollIntoView({ behavior:'smooth', block:'center' }); });
+  // Reaction buttons
+  document.getElementById('likeBtn').addEventListener('click', () => toggleReaction(postId, 'like'));
+  document.getElementById('dislikeBtn').addEventListener('click', () => toggleReaction(postId, 'dislike'));
+  
+  // Comment toggle - smooth scroll
+  document.getElementById('commentToggle').addEventListener('click', () => {
+    const commentForm = document.getElementById('commentFormArea');
+    if(commentForm) {
+      commentForm.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      setTimeout(() => {
+        const input = document.getElementById('commentText');
+        if(input) input.focus();
+      }, 500);
+    }
+  });
 
-  document.getElementById('sendComment').addEventListener('click', async ()=>{
+  // Send comment
+  document.getElementById('sendComment').addEventListener('click', async () => {
     const text = document.getElementById('commentText').value.trim();
     if(!text) return alert('Viết bình luận trước khi gửi.');
     const user = auth.currentUser;
     if(!user) return alert('Bạn cần đăng nhập để bình luận.');
-    const udoc = await getDoc(doc(db,'users',user.uid)); const prof = udoc.exists() ? udoc.data() : null;
-    await addDoc(collection(db,'posts',postId,'comments'), { displayName: prof?.displayName || user.email, userId: user.uid, text, createdAt: serverTimestamp() });
-    await updateDoc(doc(db,'posts',postId), { commentsCount: increment(1) });
-    document.getElementById('commentText').value = '';
+    
+    const btn = document.getElementById('sendComment');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="bi bi-hourglass-split"></i><span>Đang gửi...</span>';
+    
+    try {
+      const udoc = await getDoc(doc(db, 'users', user.uid));
+      const prof = udoc.exists() ? udoc.data() : null;
+      await addDoc(collection(db, 'posts', postId, 'comments'), {
+        displayName: prof?.displayName || user.email,
+        userId: user.uid,
+        text,
+        createdAt: serverTimestamp()
+      });
+      await updateDoc(doc(db, 'posts', postId), { commentsCount: increment(1) });
+      document.getElementById('commentText').value = '';
+      
+      // Success feedback
+      btn.innerHTML = '<i class="bi bi-check-lg"></i><span>Đã gửi</span>';
+      setTimeout(() => {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-send-fill"></i><span>Gửi bình luận</span>';
+      }, 1500);
+    } catch(err) {
+      console.error('Comment error:', err);
+      alert('Không thể gửi bình luận. Vui lòng thử lại.');
+      btn.disabled = false;
+      btn.innerHTML = '<i class="bi bi-send-fill"></i><span>Gửi bình luận</span>';
+    }
   });
 
+  // Auth state for comments
   onAuthStateChanged(auth, user => {
-    if(user){ document.getElementById('loginNotice').style.display = 'none'; document.getElementById('commentFormArea').style.display = 'block'; }
-    else { document.getElementById('loginNotice').style.display = 'block'; document.getElementById('commentFormArea').style.display = 'none'; }
+    if(user) {
+      document.getElementById('loginNotice').style.display = 'none';
+      document.getElementById('commentFormArea').style.display = 'block';
+    } else {
+      document.getElementById('loginNotice').style.display = 'block';
+      document.getElementById('commentFormArea').style.display = 'none';
+    }
     updateReactionButtonsState();
   });
 }
 
-async function updateReactionButtonsState(){
+/**
+ * Update reaction buttons visual state
+ */
+async function updateReactionButtonsState() {
   const user = auth.currentUser;
   const likeBtn = document.getElementById('likeBtn');
   const disBtn = document.getElementById('dislikeBtn');
   if(!likeBtn || !disBtn) return;
-  likeBtn.classList.remove('btn-primary'); likeBtn.classList.add('btn-outline-primary');
-  disBtn.classList.remove('btn-danger'); disBtn.classList.add('btn-outline-danger');
+  
+  likeBtn.classList.remove('active-like');
+  disBtn.classList.remove('active-dislike');
+  
   if(!user) return;
+  
   try {
-    const likeDoc = await getDoc(doc(db,'posts',postId,'likes',user.uid));
-    if(likeDoc.exists()){
+    const likeDoc = await getDoc(doc(db, 'posts', postId, 'likes', user.uid));
+    if(likeDoc.exists()) {
       const t = likeDoc.data().type;
-      if(t === 'like'){ likeBtn.classList.remove('btn-outline-primary'); likeBtn.classList.add('btn-primary'); }
-      else if(t === 'dislike'){ disBtn.classList.remove('btn-outline-danger'); disBtn.classList.add('btn-danger'); }
+      if(t === 'like') {
+        likeBtn.classList.add('active-like');
+      } else if(t === 'dislike') {
+        disBtn.classList.add('active-dislike');
+      }
     }
-  } catch(e){ console.error(e); }
+  } catch(e) {
+    console.error(e);
+  }
 }
 
-async function toggleReaction(postId, reaction){
+/**
+ * Toggle reaction (like/dislike)
+ */
+async function toggleReaction(postId, reaction) {
   const user = auth.currentUser;
-  if(!user){ alert('Bạn cần đăng nhập để tương tác (Like/Dislike).'); return; }
-  const likeDocRef = doc(db,'posts',postId,'likes',user.uid);
-  const postRef = doc(db,'posts',postId);
+  if(!user) {
+    alert('Bạn cần đăng nhập để tương tác (Like/Dislike).');
+    return;
+  }
+  
+  const likeDocRef = doc(db, 'posts', postId, 'likes', user.uid);
+  const postRef = doc(db, 'posts', postId);
   const likeSnap = await getDoc(likeDocRef);
   const batch = writeBatch(db);
-  if(!likeSnap.exists()){
+  
+  if(!likeSnap.exists()) {
     batch.set(likeDocRef, { userId: user.uid, type: reaction, createdAt: serverTimestamp() });
-    if(reaction === 'like') batch.update(postRef, { likes: increment(1) }); else batch.update(postRef, { dislikes: increment(1) });
+    if(reaction === 'like') batch.update(postRef, { likes: increment(1) });
+    else batch.update(postRef, { dislikes: increment(1) });
   } else {
     const prev = likeSnap.data().type;
-    if(prev === reaction){
+    if(prev === reaction) {
       batch.delete(likeDocRef);
-      if(reaction === 'like') batch.update(postRef, { likes: increment(-1) }); else batch.update(postRef, { dislikes: increment(-1) });
+      if(reaction === 'like') batch.update(postRef, { likes: increment(-1) });
+      else batch.update(postRef, { dislikes: increment(-1) });
     } else {
       batch.update(likeDocRef, { type: reaction, updatedAt: serverTimestamp() });
-      if(reaction === 'like') batch.update(postRef, { likes: increment(1), dislikes: increment(-1) }); else batch.update(postRef, { dislikes: increment(1), likes: increment(-1) });
+      if(reaction === 'like') batch.update(postRef, { likes: increment(1), dislikes: increment(-1) });
+      else batch.update(postRef, { dislikes: increment(1), likes: increment(-1) });
     }
   }
-  try { await batch.commit(); updateReactionButtonsState(); } catch(err){ console.error('Reaction failed', err); alert('Không thể cập nhật phản hồi — thử lại sau.'); }
+  
+  try {
+    await batch.commit();
+    updateReactionButtonsState();
+  } catch(err) {
+    console.error('Reaction failed', err);
+    alert('Không thể cập nhật phản hồi — thử lại sau.');
+  }
 }
 
+// Page visibility: pause animations
+document.addEventListener('visibilitychange', () => {
+  const orbs = document.querySelectorAll('.relife-orb');
+  const gradient = document.querySelector('.relife-gradient');
+  
+  if(document.hidden) {
+    orbs.forEach(orb => orb.style.animationPlayState = 'paused');
+    if(gradient) gradient.style.animationPlayState = 'paused';
+  } else {
+    orbs.forEach(orb => orb.style.animationPlayState = 'running');
+    if(gradient) gradient.style.animationPlayState = 'running';
+  }
+});
+
+// Initialize
 load();
