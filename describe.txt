@@ -222,3 +222,4 @@ Hiển thị thông tin cá nhân của user, danh sách bài đăng của họ,
 * Counters do client cập nhật có thể gặp race/permission issues; production-hardening nên dùng backend function (Cloud Function) để guarantee atomic increments — (nhưng mình không thêm vì bạn không muốn dùng Cloud Functions bây giờ).
 * Mọi thao tác ghi quan trọng đều có handling: tách bước, rollback best-effort, và fallback logs để debug.
 
+Tag Name Search của user có dạng "@<tên>", mỗi người có một tag Name Search duy nhất và không trùng nhau, Tag Name Search có vai trò quan trọng với các công cụ tìm kiếm của Relife
