@@ -1,0 +1,865 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Code Viewer - Công cụ hiển thị code</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: #f5f5f5;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        .container {
+            display: flex;
+            height: 100vh;
+            position: relative;
+        }
+
+        /* Mobile Menu Button */
+        .menu-toggle {
+            display: none;
+            position: fixed;
+            top: 16px;
+            left: 16px;
+            z-index: 1000;
+            background: #3b82f6;
+            color: white;
+            border: none;
+            width: 44px;
+            height: 44px;
+            border-radius: 8px;
+            cursor: pointer;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            align-items: center;
+            justify-content: center;
+        }
+
+        .menu-toggle:active {
+            transform: scale(0.95);
+        }
+
+        /* Overlay */
+        .overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.5);
+            z-index: 998;
+        }
+
+        .overlay.show {
+            display: block;
+        }
+
+        /* Sidebar */
+        .sidebar {
+            width: 320px;
+            background: white;
+            border-right: 1px solid #e0e0e0;
+            display: flex;
+            flex-direction: column;
+            transition: transform 0.3s ease;
+            z-index: 999;
+        }
+
+        .sidebar-header {
+            padding: 20px;
+            border-bottom: 1px solid #e0e0e0;
+        }
+
+        .sidebar-header h1 {
+            font-size: 20px;
+            color: #333;
+            margin-bottom: 15px;
+        }
+
+        .search-box {
+            position: relative;
+        }
+
+        .search-box input {
+            width: 100%;
+            padding: 10px 10px 10px 36px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            font-size: 14px;
+            outline: none;
+        }
+
+        .search-box input:focus {
+            border-color: #3b82f6;
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+        }
+
+        .search-icon {
+            position: absolute;
+            left: 12px;
+            top: 12px;
+            color: #999;
+        }
+
+        .file-count {
+            margin-top: 12px;
+            font-size: 13px;
+            color: #666;
+        }
+
+        .file-list {
+            flex: 1;
+            overflow-y: auto;
+            padding: 10px 0;
+        }
+
+        .folder-item, .file-item {
+            padding: 10px 20px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            transition: background 0.2s;
+        }
+
+        .folder-item:hover, .file-item:hover {
+            background: #f5f5f5;
+        }
+
+        .file-item.active {
+            background: #eff6ff;
+            border-left: 4px solid #3b82f6;
+        }
+
+        .file-item .icon {
+            color: #3b82f6;
+            flex-shrink: 0;
+        }
+
+        .folder-item .icon {
+            color: #fbbf24;
+        }
+
+        .folder-item .chevron {
+            transition: transform 0.2s;
+        }
+
+        .folder-item.expanded .chevron {
+            transform: rotate(90deg);
+        }
+
+        .folder-children {
+            margin-left: 20px;
+            display: none;
+        }
+
+        .folder-children.show {
+            display: block;
+        }
+
+        .file-name {
+            font-size: 14px;
+            color: #333;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .folder-name {
+            font-size: 14px;
+            color: #333;
+            font-weight: 500;
+        }
+
+        /* Main content */
+        .main-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .content-header {
+            background: white;
+            border-bottom: 1px solid #e0e0e0;
+            padding: 16px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 16px;
+            flex-wrap: wrap;
+        }
+
+        .content-header .file-info {
+            flex: 1;
+            min-width: 200px;
+        }
+
+        .content-header h2 {
+            font-size: 18px;
+            color: #333;
+            margin-bottom: 5px;
+            word-break: break-all;
+        }
+
+        .content-header .file-path {
+            font-size: 13px;
+            color: #666;
+            word-break: break-all;
+        }
+
+        .content-header .actions {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .language-tag {
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 500;
+            white-space: nowrap;
+        }
+
+        .lang-javascript { background: #fef3c7; color: #92400e; }
+        .lang-python { background: #dbeafe; color: #1e40af; }
+        .lang-html { background: #fed7aa; color: #9a3412; }
+        .lang-css { background: #e9d5ff; color: #6b21a8; }
+        .lang-java { background: #fecaca; color: #991b1b; }
+        .lang-typescript { background: #dbeafe; color: #1e40af; }
+        .lang-json { background: #e5e7eb; color: #374151; }
+        .lang-php { background: #e0e7ff; color: #3730a3; }
+        .lang-cpp, .lang-c { background: #fce7f3; color: #9f1239; }
+
+        .copy-btn {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 16px;
+            background: #3b82f6;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background 0.2s;
+            white-space: nowrap;
+        }
+
+        .copy-btn:hover {
+            background: #2563eb;
+        }
+
+        .copy-btn:active {
+            transform: scale(0.95);
+        }
+
+        .copy-btn.copied {
+            background: #10b981;
+        }
+
+        .code-content {
+            flex: 1;
+            overflow: auto;
+            background: #1e1e1e;
+            padding: 16px;
+        }
+
+        .code-content pre {
+            color: #d4d4d4;
+            font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+            font-size: 13px;
+            line-height: 1.6;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+
+        .empty-state {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            color: #999;
+            padding: 20px;
+            text-align: center;
+        }
+
+        .empty-state svg {
+            margin-bottom: 20px;
+            opacity: 0.5;
+        }
+
+        .loading {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            padding: 20px;
+        }
+
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #3b82f6;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+            margin-bottom: 20px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .error-state {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            padding: 20px;
+        }
+
+        .error-box {
+            background: white;
+            padding: 40px;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            text-align: center;
+            max-width: 400px;
+            width: 100%;
+        }
+
+        .error-box p {
+            color: #dc2626;
+            margin-bottom: 20px;
+        }
+
+        .retry-btn {
+            padding: 10px 20px;
+            background: #3b82f6;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+
+        .retry-btn:hover {
+            background: #2563eb;
+        }
+
+        /* Responsive - Tablet */
+        @media (max-width: 1024px) {
+            .sidebar {
+                width: 280px;
+            }
+
+            .content-header h2 {
+                font-size: 16px;
+            }
+
+            .code-content {
+                padding: 12px;
+            }
+
+            .code-content pre {
+                font-size: 12px;
+            }
+        }
+
+        /* Responsive - Mobile */
+        @media (max-width: 768px) {
+            .menu-toggle {
+                display: flex;
+            }
+
+            .sidebar {
+                position: fixed;
+                top: 0;
+                left: 0;
+                bottom: 0;
+                width: 85%;
+                max-width: 320px;
+                transform: translateX(-100%);
+                box-shadow: 4px 0 8px rgba(0,0,0,0.1);
+            }
+
+            .sidebar.show {
+                transform: translateX(0);
+            }
+
+            .main-content {
+                width: 100%;
+            }
+
+            .content-header {
+                padding: 72px 16px 16px 16px;
+            }
+
+            .content-header h2 {
+                font-size: 15px;
+            }
+
+            .content-header .file-path {
+                font-size: 12px;
+            }
+
+            .content-header .actions {
+                width: 100%;
+                justify-content: flex-end;
+            }
+
+            .copy-btn {
+                padding: 8px 14px;
+                font-size: 13px;
+            }
+
+            .copy-btn span {
+                display: none;
+            }
+
+            .language-tag {
+                padding: 5px 10px;
+                font-size: 11px;
+            }
+
+            .code-content {
+                padding: 12px;
+            }
+
+            .code-content pre {
+                font-size: 11px;
+                line-height: 1.5;
+            }
+
+            .file-list {
+                padding-bottom: 20px;
+            }
+
+            .sidebar-header {
+                padding: 16px;
+            }
+
+            .sidebar-header h1 {
+                font-size: 18px;
+            }
+        }
+
+        /* Responsive - Small Mobile */
+        @media (max-width: 480px) {
+            .menu-toggle {
+                width: 40px;
+                height: 40px;
+                top: 12px;
+                left: 12px;
+            }
+
+            .sidebar {
+                width: 90%;
+            }
+
+            .content-header {
+                padding: 64px 12px 12px 12px;
+            }
+
+            .content-header h2 {
+                font-size: 14px;
+            }
+
+            .code-content {
+                padding: 8px;
+            }
+
+            .code-content pre {
+                font-size: 10px;
+            }
+
+            .copy-btn {
+                padding: 6px 12px;
+            }
+
+            .language-tag {
+                font-size: 10px;
+                padding: 4px 8px;
+            }
+        }
+
+        /* Scrollbar styling */
+        .file-list::-webkit-scrollbar,
+        .code-content::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+
+        .file-list::-webkit-scrollbar-track,
+        .code-content::-webkit-scrollbar-track {
+            background: #f1f1f1;
+        }
+
+        .file-list::-webkit-scrollbar-thumb {
+            background: #c1c1c1;
+            border-radius: 4px;
+        }
+
+        .code-content::-webkit-scrollbar-thumb {
+            background: #4a4a4a;
+            border-radius: 4px;
+        }
+
+        .file-list::-webkit-scrollbar-thumb:hover,
+        .code-content::-webkit-scrollbar-thumb:hover {
+            background: #888;
+        }
+    </style>
+</head>
+<body>
+    <div id="app">
+        <div class="loading">
+            <div class="spinner"></div>
+            <p>Đang tải files...</p>
+        </div>
+    </div>
+
+    <script>
+        let files = [];
+        let selectedFile = null;
+        let searchTerm = '';
+        let expandedFolders = new Set();
+        let sidebarOpen = false;
+
+        // Load tất cả các file TXT
+        async function loadFiles() {
+            const loadedFiles = [];
+            let index = 1;
+            let consecutiveErrors = 0;
+
+            while (consecutiveErrors < 3) {
+                try {
+                    const response = await fetch(`./codes/${index}.txt`);
+                    if (response.ok) {
+                        const text = await response.text();
+                        const data = parseFileContent(text);
+                        if (data) {
+                            loadedFiles.push({ ...data, id: index });
+                            consecutiveErrors = 0;
+                        } else {
+                            consecutiveErrors++;
+                        }
+                    } else {
+                        consecutiveErrors++;
+                    }
+                } catch (err) {
+                    consecutiveErrors++;
+                }
+                index++;
+            }
+
+            if (loadedFiles.length === 0) {
+                showError('Không tìm thấy file TXT nào trong thư mục codes/');
+                return;
+            }
+
+            files = loadedFiles;
+            selectedFile = files[0];
+            render();
+        }
+
+        // Parse nội dung file txt
+        function parseFileContent(text) {
+            const lines = text.split('\n');
+            if (lines.length < 4) return null;
+
+            // Dòng 1: path
+            // Dòng 2: name
+            // Dòng 3: language
+            // Dòng 4: --- (separator)
+            // Dòng 5+: code content
+            
+            const path = lines[0].trim();
+            const name = lines[1].trim();
+            const language = lines[2].trim();
+            
+            // Tìm dòng separator ---
+            let separatorIndex = -1;
+            for (let i = 3; i < lines.length; i++) {
+                if (lines[i].trim() === '---') {
+                    separatorIndex = i;
+                    break;
+                }
+            }
+            
+            if (separatorIndex === -1) return null;
+            
+            // Lấy content từ dòng sau separator
+            const content = lines.slice(separatorIndex + 1).join('\n');
+            
+            return { path, name, language, content };
+        }
+
+        // Hiển thị lỗi
+        function showError(message) {
+            document.getElementById('app').innerHTML = `
+                <div class="error-state">
+                    <div class="error-box">
+                        <p>${message}</p>
+                        <button class="retry-btn" onclick="location.reload()">Thử lại</button>
+                    </div>
+                </div>
+            `;
+        }
+
+        // Toggle sidebar (mobile)
+        function toggleSidebar() {
+            sidebarOpen = !sidebarOpen;
+            const sidebar = document.querySelector('.sidebar');
+            const overlay = document.querySelector('.overlay');
+            
+            if (sidebarOpen) {
+                sidebar.classList.add('show');
+                overlay.classList.add('show');
+            } else {
+                sidebar.classList.remove('show');
+                overlay.classList.remove('show');
+            }
+        }
+
+        // Đóng sidebar khi click overlay
+        function closeMenu() {
+            sidebarOpen = false;
+            document.querySelector('.sidebar').classList.remove('show');
+            document.querySelector('.overlay').classList.remove('show');
+        }
+
+        // Tổ chức files theo cấu trúc thư mục
+        function organizeFilesByPath() {
+            const tree = {};
+            
+            files.forEach(file => {
+                const parts = file.path.split('/').filter(p => p);
+                let current = tree;
+                
+                parts.forEach((part, index) => {
+                    if (!current[part]) {
+                        current[part] = index === parts.length - 1 ? file : {};
+                    }
+                    current = current[part];
+                });
+            });
+            
+            return tree;
+        }
+
+        // Render cây thư mục
+        function renderTree(node, path = '', level = 0) {
+            let html = '';
+            
+            Object.keys(node).forEach(key => {
+                const item = node[key];
+                const currentPath = path ? `${path}/${key}` : key;
+                
+                if (item.path) {
+                    // Đây là file
+                    const isSelected = selectedFile?.id === item.id;
+                    const matchesSearch = !searchTerm || 
+                        item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                        item.path.toLowerCase().includes(searchTerm.toLowerCase());
+                    
+                    if (!matchesSearch) return;
+                    
+                    html += `
+                        <div class="file-item ${isSelected ? 'active' : ''}" 
+                             onclick="selectFile(${item.id})"
+                             style="padding-left: ${20 + level * 20}px">
+                            <svg class="icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                                <polyline points="14 2 14 8 20 8"></polyline>
+                                <line x1="16" y1="13" x2="8" y2="13"></line>
+                                <line x1="16" y1="17" x2="8" y2="17"></line>
+                                <polyline points="10 9 9 9 8 9"></polyline>
+                            </svg>
+                            <span class="file-name">${item.name}</span>
+                        </div>
+                    `;
+                } else {
+                    // Đây là thư mục
+                    const isExpanded = expandedFolders.has(currentPath);
+                    html += `
+                        <div class="folder-item ${isExpanded ? 'expanded' : ''}" 
+                             onclick="toggleFolder('${currentPath}')"
+                             style="padding-left: ${20 + level * 20}px">
+                            <svg class="chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <polyline points="9 18 15 12 9 6"></polyline>
+                            </svg>
+                            <svg class="icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+                            </svg>
+                            <span class="folder-name">${key}</span>
+                        </div>
+                        <div class="folder-children ${isExpanded ? 'show' : ''}">
+                            ${renderTree(item, currentPath, level + 1)}
+                        </div>
+                    `;
+                }
+            });
+            
+            return html;
+        }
+
+        // Toggle thư mục
+        function toggleFolder(path) {
+            if (expandedFolders.has(path)) {
+                expandedFolders.delete(path);
+            } else {
+                expandedFolders.add(path);
+            }
+            render();
+        }
+
+        // Chọn file
+        function selectFile(id) {
+            selectedFile = files.find(f => f.id === id);
+            
+            // Đóng sidebar trên mobile khi chọn file
+            if (window.innerWidth <= 768) {
+                closeMenu();
+            }
+            
+            render();
+        }
+
+        // Sao chép code
+        function copyCode() {
+            if (!selectedFile) return;
+            
+            navigator.clipboard.writeText(selectedFile.content);
+            const btn = document.querySelector('.copy-btn');
+            const originalHTML = btn.innerHTML;
+            btn.classList.add('copied');
+            btn.innerHTML = `
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="20 6 9 17 4 12"></polyline>
+                </svg>
+                <span>Đã sao chép</span>
+            `;
+            
+            setTimeout(() => {
+                btn.classList.remove('copied');
+                btn.innerHTML = originalHTML;
+            }, 2000);
+        }
+
+        // Tìm kiếm
+        function handleSearch(e) {
+            searchTerm = e.target.value;
+            render();
+        }
+
+        // Render giao diện
+        function render() {
+            const fileTree = organizeFilesByPath();
+            const isMobile = window.innerWidth <= 768;
+            
+            document.getElementById('app').innerHTML = `
+                ${isMobile ? `
+                    <button class="menu-toggle" onclick="toggleSidebar()">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <line x1="3" y1="12" x2="21" y2="12"></line>
+                            <line x1="3" y1="6" x2="21" y2="6"></line>
+                            <line x1="3" y1="18" x2="21" y2="18"></line>
+                        </svg>
+                    </button>
+                    <div class="overlay" onclick="closeMenu()"></div>
+                ` : ''}
+                <div class="container">
+                    <div class="sidebar ${sidebarOpen ? 'show' : ''}">
+                        <div class="sidebar-header">
+                            <h1>Code Viewer</h1>
+                            <div class="search-box">
+                                <svg class="search-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <circle cx="11" cy="11" r="8"></circle>
+                                    <path d="m21 21-4.35-4.35"></path>
+                                </svg>
+                                <input type="text" placeholder="Tìm kiếm file..." value="${searchTerm}" oninput="handleSearch(event)">
+                            </div>
+                            <div class="file-count">Tổng số files: ${files.length}</div>
+                        </div>
+                        <div class="file-list">
+                            ${renderTree(fileTree)}
+                        </div>
+                    </div>
+                    <div class="main-content">
+                        ${selectedFile ? `
+                            <div class="content-header">
+                                <div class="file-info">
+                                    <h2>${selectedFile.name}</h2>
+                                    <div class="file-path">${selectedFile.path}</div>
+                                </div>
+                                <div class="actions">
+                                    <span class="language-tag lang-${selectedFile.language.toLowerCase()}">
+                                        ${selectedFile.language}
+                                    </span>
+                                    <button class="copy-btn" onclick="copyCode()">
+                                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                                            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                                        </svg>
+                                        <span>Sao chép</span>
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="code-content">
+                                <pre><code>${escapeHtml(selectedFile.content)}</code></pre>
+                            </div>
+                        ` : `
+                            <div class="empty-state">
+                                <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                                    <polyline points="14 2 14 8 20 8"></polyline>
+                                </svg>
+                                <p>Chọn một file để xem nội dung</p>
+                            </div>
+                        `}
+                    </div>
+                </div>
+            `;
+        }
+
+        // Escape HTML
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // Xử lý resize
+        let resizeTimer;
+        window.addEventListener('resize', () => {
+            clearTimeout(resizeTimer);
+            resizeTimer = setTimeout(() => {
+                if (window.innerWidth > 768) {
+                    sidebarOpen = false;
+                }
+                render();
+            }, 250);
+        });
+
+        // Khởi động ứng dụng
+        loadFiles();
+    </script>
+</body>
+</html>

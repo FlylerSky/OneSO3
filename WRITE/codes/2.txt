@@ -1,0 +1,139 @@
+post.html
+post.html
+HTML
+---
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Relife — Bài viết</title>
+
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/quill@2.0.2/dist/quill.snow.css" rel="stylesheet">
+
+  <!-- Relife UI 1.0 CSS -->
+  <link href="CSS/post.css" rel="stylesheet">
+</head>
+<body>
+  <!-- Animated Background -->
+  <div class="relife-bg">
+    <div class="relife-gradient"></div>
+    <div class="relife-orb relife-orb-1"></div>
+    <div class="relife-orb relife-orb-2"></div>
+    <div class="relife-orb relife-orb-3"></div>
+  </div>
+
+  <div class="container container-main">
+    <!-- Header -->
+    <div class="relife-header">
+      <a href="index.html" class="relife-back-btn" id="nut_thoat">
+        <i class="bi bi-arrow-left"></i>
+      </a>
+      <div class="relife-page-title">
+        <h4 class="mb-0">Bài viết</h4>
+        <div class="relife-subtitle">Chi tiết nội dung</div>
+      </div>
+      <div class="relife-actions">
+        <button class="relife-icon-btn" id="shareBtn" title="Chia sẻ">
+          <i class="bi bi-share"></i>
+        </button>
+      </div>
+    </div>
+
+    <!-- Post Content Area -->
+    <div id="postArea" class="relife-post-container">
+      <div id="loading" class="relife-loading">
+        <div class="relife-spinner"></div>
+        <div>Đang tải bài viết...</div>
+      </div>
+    </div>
+
+    <!-- Comments Section (Will be injected) -->
+    <div id="commentsSection" class="relife-comments-section" style="display:none;">
+      <div class="relife-glass-card">
+        <div class="relife-section-title">
+          <i class="bi bi-chat-dots-fill"></i>
+          <span>Bình luận</span>
+          <span class="relife-badge" id="commentCount">0</span>
+        </div>
+
+        <!-- Login Notice -->
+        <div id="loginNotice" class="relife-notice" style="display:none;">
+          <i class="bi bi-info-circle-fill"></i>
+          <span>Bạn cần đăng nhập để viết bình luận</span>
+          <button class="relife-btn-sm" onclick="alert('Chuyển đến trang đăng nhập')">
+            Đăng nhập
+          </button>
+        </div>
+
+        <!-- Comment Form -->
+        <div id="commentFormArea" class="relife-comment-form" style="display:none;">
+          <div class="relife-comment-input-wrapper">
+            <textarea 
+              id="commentText" 
+              class="relife-comment-input" 
+              rows="3" 
+              placeholder="Chia sẻ suy nghĩ của bạn..."></textarea>
+            <button id="sendComment" class="relife-btn-primary">
+              <i class="bi bi-send-fill"></i>
+              <span>Gửi bình luận</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Comments List -->
+        <div id="commentsList" class="relife-comments-list">
+          <div class="text-center text-muted py-3">Chưa có bình luận</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Image Viewer Overlay -->
+  <div id="os-image-viewer" class="os-viewer-overlay">
+    <div class="os-viewer-inner" role="dialog" aria-modal="true" tabindex="-1">
+      <img class="os-viewer-img" alt="Image viewer">
+      <div class="os-viewer-controls">
+        <button data-action="zoom-in" title="Phóng to" aria-label="Zoom in">
+          <i class="bi bi-zoom-in"></i>
+        </button>
+        <button data-action="zoom-out" title="Thu nhỏ" aria-label="Zoom out">
+          <i class="bi bi-zoom-out"></i>
+        </button>
+        <button data-action="fit" title="Vừa màn hình" aria-label="Fit to screen">
+          <i class="bi bi-arrows-fullscreen"></i>
+        </button>
+        <a data-action="download" title="Tải xuống" href="#" download>
+          <button type="button" aria-label="Download">
+            <i class="bi bi-download"></i>
+          </button>
+        </a>
+        <button data-action="close" title="Đóng" aria-label="Close">
+          <i class="bi bi-x-lg"></i>
+        </button>
+      </div>
+      <div class="os-viewer-zoom-indicator">100%</div>
+      <div class="os-viewer-hint">Kéo để di chuyển · Cuộn để zoom · Esc để đóng</div>
+    </div>
+  </div>
+
+  <!-- Hidden Quill Renderer -->
+  <div id="__qs_hidden_renderer" aria-hidden="true" style="display:none"></div>
+
+  <!-- Version Badge -->
+  <div class="relife-version-badge">
+    <span class="relife-version-label">Relife UI</span>
+    <span class="relife-version-number">1.0</span>
+  </div>
+
+  <!-- Libraries -->
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/dompurify@2.4.0/dist/purify.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/quill@2.0.2/dist/quill.min.js"></script>
+
+  <!-- Module script -->
+  <script type="module" src="JS/post.js"></script>
+</body>
+</html>
