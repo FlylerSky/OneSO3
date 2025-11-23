@@ -1,5 +1,5 @@
-// JS/tag.js - Relife UI 1.0 Enhanced
-// Optimized for Liquid Glass Design System
+// JS/tag.js - Relife UI 1.1 (Optimized for Performance)
+// 60fps smooth experience with minimal animations
 import { initFirebase } from '../firebase-config.js';
 import { collection, query, orderBy, getDocs, onSnapshot } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore.js";
 
@@ -40,21 +40,21 @@ const fmtDate = ts => {
   } 
 };
 
-// Connection status with enhanced UI
+// Connection status
 function updateConn() {
   const isOnline = navigator.onLine;
   const statusDot = statusConn.querySelector('.relife-status-dot');
   const statusText = statusConn.querySelector('.relife-status-text');
   
   if(isOnline) {
-    statusConn.style.background = 'rgba(52, 199, 89, 0.1)';
-    statusConn.style.color = '#34C759';
-    statusDot.style.background = '#34C759';
+    statusConn.style.background = 'rgba(25, 135, 84, 0.1)';
+    statusConn.style.color = '#198754';
+    statusDot.style.background = '#198754';
     statusText.textContent = 'Online';
   } else {
-    statusConn.style.background = 'rgba(255, 45, 85, 0.1)';
-    statusConn.style.color = '#FF2D55';
-    statusDot.style.background = '#FF2D55';
+    statusConn.style.background = 'rgba(220, 53, 69, 0.1)';
+    statusConn.style.color = '#dc3545';
+    statusDot.style.background = '#dc3545';
     statusText.textContent = 'Offline';
   }
 }
@@ -78,7 +78,7 @@ if(!selectedTag) {
   activeTagTitle.textContent = selectedTag.replace(/^#/, '');
 }
 
-// Sort button handlers with enhanced animations
+// Sort button handlers
 sortTrendingBtn.addEventListener('click', () => {
   if(viewMode === 'trending') return;
   viewMode = 'trending';
@@ -130,7 +130,7 @@ function buildHashtagCollections(posts) {
 }
 
 /**
- * Render all hashtags list with Relife UI style
+ * Render all hashtags list
  */
 function renderAllHashtags() {
   const items = Array.from(allHashtags.values())
@@ -148,28 +148,26 @@ function renderAllHashtags() {
     return;
   }
   
-  let html = '';
+  // Performance optimization: use DocumentFragment
+  const fragment = document.createDocumentFragment();
+  
   items.forEach(it => {
-    html += `
-      <div class="all-hashtag-item" data-tag="${esc(it.tag)}">
-        <a class="hashtag-btn" href="tag.html?tag=${encodeURIComponent(it.tag)}">${esc(it.tag)}</a>
-        <span class="badge">${it.count}</span>
-      </div>
+    const div = document.createElement('div');
+    div.className = 'all-hashtag-item';
+    div.dataset.tag = it.tag;
+    div.innerHTML = `
+      <a class="hashtag-btn" href="tag.html?tag=${encodeURIComponent(it.tag)}">${esc(it.tag)}</a>
+      <span class="badge">${it.count}</span>
     `;
+    fragment.appendChild(div);
   });
   
-  allHashtagsList.innerHTML = html;
-  
-  // Smooth scroll effect
-  allHashtagsList.style.opacity = '0';
-  setTimeout(() => {
-    allHashtagsList.style.transition = 'opacity 0.3s ease';
-    allHashtagsList.style.opacity = '1';
-  }, 50);
+  allHashtagsList.innerHTML = '';
+  allHashtagsList.appendChild(fragment);
 }
 
 /**
- * Compute trending hashtags with enhanced algorithm
+ * Compute trending hashtags
  */
 function computeTrendingHashtagsRealtime(posts) {
   const now = Date.now();
@@ -210,21 +208,25 @@ function computeTrendingHashtagsRealtime(posts) {
     return;
   }
   
-  let html = '';
+  // Performance optimization: use DocumentFragment
+  const fragment = document.createDocumentFragment();
+  
   items.forEach((it, idx) => {
     const rank = idx + 1;
     const emoji = rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : '';
-    html += `
-      <div class="leaderboard-item" style="animation-delay: ${idx * 0.05}s;">
-        <a class="hashtag-btn" href="tag.html?tag=${encodeURIComponent(it.tag)}">
-          ${emoji} ${esc(it.tag)}
-        </a>
-        <div class="small-muted">${it.count} bài</div>
-      </div>
+    const div = document.createElement('div');
+    div.className = 'leaderboard-item';
+    div.innerHTML = `
+      <a class="hashtag-btn" href="tag.html?tag=${encodeURIComponent(it.tag)}">
+        ${emoji} ${esc(it.tag)}
+      </a>
+      <div class="small-muted">${it.count} bài</div>
     `;
+    fragment.appendChild(div);
   });
   
-  hashtagLeaderboard.innerHTML = html;
+  hashtagLeaderboard.innerHTML = '';
+  hashtagLeaderboard.appendChild(fragment);
 }
 
 /**
@@ -299,45 +301,48 @@ function calculateTrendingScore(post, now) {
 }
 
 /**
- * Render posts with Relife UI style
+ * Render posts (Performance optimized)
  */
 function renderPosts(posts) {
-  let html = '';
+  // Use DocumentFragment for better performance
+  const fragment = document.createDocumentFragment();
   
-  posts.forEach((p, idx) => {
+  posts.forEach(p => {
     const plain = DOMPurify.sanitize(p.content || '', { ALLOWED_TAGS: [] });
     const snippet = plain.length > 180 ? plain.slice(0, 180) + '…' : plain;
     
-    html += `
-      <div class="relife-post-card" style="animation: fadeInUp 0.4s ease ${idx * 0.05}s both;">
-        <div class="relife-post-header">
-          <div class="relife-post-info">
-            <div class="fw-bold">${esc(p.title || '(Không tiêu đề)')}</div>
-            <div class="small-muted">
-              <i class="bi bi-person-circle"></i> ${esc(p.displayName || 'Ẩn danh')}
-            </div>
-          </div>
-          <div class="relife-post-stats">
-            <div><i class="bi bi-hand-thumbs-up-fill"></i> ${p.likes || 0}</div>
-            <div><i class="bi bi-chat-fill"></i> ${p.commentsCount || 0}</div>
+    const card = document.createElement('div');
+    card.className = 'relife-post-card';
+    card.innerHTML = `
+      <div class="relife-post-header">
+        <div class="relife-post-info">
+          <div class="fw-bold">${esc(p.title || '(Không tiêu đề)')}</div>
+          <div class="small-muted">
+            <i class="bi bi-person-circle"></i> ${esc(p.displayName || 'Ẩn danh')}
           </div>
         </div>
-        <div class="relife-post-snippet">${esc(snippet)}</div>
-        <div class="relife-post-meta">
-          <div class="relife-post-time">
-            <i class="bi bi-clock"></i>
-            <span>${fmtDate(p.createdAt)}</span>
-          </div>
-          <a class="relife-post-action" href="post.html?id=${p.id}">
-            <span>Xem bài</span>
-            <i class="bi bi-arrow-right"></i>
-          </a>
+        <div class="relife-post-stats">
+          <div><i class="bi bi-hand-thumbs-up-fill"></i> ${p.likes || 0}</div>
+          <div><i class="bi bi-chat-fill"></i> ${p.commentsCount || 0}</div>
         </div>
       </div>
+      <div class="relife-post-snippet">${esc(snippet)}</div>
+      <div class="relife-post-meta">
+        <div class="relife-post-time">
+          <i class="bi bi-clock"></i>
+          <span>${fmtDate(p.createdAt)}</span>
+        </div>
+        <a class="relife-post-action" href="post.html?id=${p.id}">
+          <span>Xem bài</span>
+          <i class="bi bi-arrow-right"></i>
+        </a>
+      </div>
     `;
+    fragment.appendChild(card);
   });
   
-  postsList.innerHTML = html;
+  postsList.innerHTML = '';
+  postsList.appendChild(fragment);
 }
 
 /**
@@ -391,7 +396,7 @@ clearSearchBtn.addEventListener('click', () => {
 });
 
 /**
- * Perform search with enhanced UI
+ * Perform search (Performance optimized)
  */
 function performSearch(keyword) {
   const kw = keyword.toLowerCase();
@@ -410,52 +415,76 @@ function performSearch(keyword) {
     })
     .slice(0, 8);
   
-  let html = '';
+  // Use DocumentFragment
+  const fragment = document.createDocumentFragment();
   
   if(matchingHashtags.length > 0) {
-    html += '<div class="mb-2 px-2"><small class="small-muted fw-bold">HASHTAGS</small></div>';
+    const header = document.createElement('div');
+    header.className = 'mb-2 px-2';
+    header.innerHTML = '<small class="small-muted fw-bold">HASHTAGS</small>';
+    fragment.appendChild(header);
+    
     matchingHashtags.forEach(h => {
-      html += `
-        <div class="search-result-item search-result-hashtag" data-type="hashtag" data-tag="${esc(h.tag)}">
-          <div>
-            <i class="bi bi-hash text-primary"></i>
-            <span class="fw-bold">${esc(h.tag)}</span>
-          </div>
-          <small class="small-muted">${h.count} bài</small>
+      const div = document.createElement('div');
+      div.className = 'search-result-item search-result-hashtag';
+      div.dataset.type = 'hashtag';
+      div.dataset.tag = h.tag;
+      div.innerHTML = `
+        <div>
+          <i class="bi bi-hash text-primary"></i>
+          <span class="fw-bold">${esc(h.tag)}</span>
         </div>
+        <small class="small-muted">${h.count} bài</small>
       `;
+      fragment.appendChild(div);
     });
-    if(matchingPosts.length > 0) html += '<hr style="opacity: 0.2;">';
+    
+    if(matchingPosts.length > 0) {
+      const hr = document.createElement('hr');
+      hr.style.opacity = '0.2';
+      fragment.appendChild(hr);
+    }
   }
   
   if(matchingPosts.length > 0) {
-    html += '<div class="mb-2 px-2"><small class="small-muted fw-bold">BÀI VIẾT</small></div>';
+    const header = document.createElement('div');
+    header.className = 'mb-2 px-2';
+    header.innerHTML = '<small class="small-muted fw-bold">BÀI VIẾT</small>';
+    fragment.appendChild(header);
+    
     matchingPosts.forEach(p => {
-      html += `
-        <div class="search-result-item" data-type="post" data-id="${p.id}">
-          <div class="fw-bold">${esc(p.title || '(Không tiêu đề)')}</div>
-          <small class="small-muted">
-            ${esc(p.displayName || 'Ẩn danh')} · 
-            <i class="bi bi-hand-thumbs-up"></i> ${p.likes || 0} · 
-            <i class="bi bi-chat"></i> ${p.commentsCount || 0}
-          </small>
-        </div>
+      const div = document.createElement('div');
+      div.className = 'search-result-item';
+      div.dataset.type = 'post';
+      div.dataset.id = p.id;
+      div.innerHTML = `
+        <div class="fw-bold">${esc(p.title || '(Không tiêu đề)')}</div>
+        <small class="small-muted">
+          ${esc(p.displayName || 'Ẩn danh')} · 
+          <i class="bi bi-hand-thumbs-up"></i> ${p.likes || 0} · 
+          <i class="bi bi-chat"></i> ${p.commentsCount || 0}
+        </small>
       `;
+      fragment.appendChild(div);
     });
   }
   
-  if(!html) {
-    html = `
-      <div class="empty-state" style="padding: 2rem 1rem;">
-        <i class="bi bi-search" style="font-size: 2rem;"></i>
-        <div>Không tìm thấy kết quả</div>
-      </div>
+  if(matchingHashtags.length === 0 && matchingPosts.length === 0) {
+    const empty = document.createElement('div');
+    empty.className = 'empty-state';
+    empty.style.padding = '2rem 1rem';
+    empty.innerHTML = `
+      <i class="bi bi-search" style="font-size: 2rem;"></i>
+      <div>Không tìm thấy kết quả</div>
     `;
+    fragment.appendChild(empty);
   }
   
-  tagSearchResults.innerHTML = html;
+  tagSearchResults.innerHTML = '';
+  tagSearchResults.appendChild(fragment);
   tagSearchResults.style.display = 'block';
   
+  // Add click handlers
   tagSearchResults.querySelectorAll('.search-result-item').forEach(item => {
     item.addEventListener('click', () => {
       const type = item.dataset.type;
@@ -514,17 +543,3 @@ tagSearchInput.addEventListener('keydown', (e) => {
     showError('Lỗi khi tải dữ liệu. Vui lòng thử lại.');
   }
 })();
-
-// Page visibility: pause/resume animations when tab inactive
-document.addEventListener('visibilitychange', () => {
-  const orbs = document.querySelectorAll('.relife-orb');
-  const gradient = document.querySelector('.relife-gradient');
-  
-  if(document.hidden) {
-    orbs.forEach(orb => orb.style.animationPlayState = 'paused');
-    if(gradient) gradient.style.animationPlayState = 'paused';
-  } else {
-    orbs.forEach(orb => orb.style.animationPlayState = 'running');
-    if(gradient) gradient.style.animationPlayState = 'running';
-  }
-});

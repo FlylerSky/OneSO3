@@ -9,7 +9,7 @@
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/quill@2.0.2/dist/quill.snow.css" rel="stylesheet">
 
-  <!-- Relife UI 1.0 CSS -->
+  <!-- Relife UI 1.1 CSS -->
   <link href="CSS/post.css" rel="stylesheet">
 </head>
 <body>
@@ -46,7 +46,7 @@
       </div>
     </div>
 
-    <!-- Comments Section (Will be injected) -->
+    <!-- Comments Section -->
     <div id="commentsSection" class="relife-comments-section" style="display:none;">
       <div class="relife-glass-card">
         <div class="relife-section-title">
@@ -67,6 +67,13 @@
         <!-- Comment Form -->
         <div id="commentFormArea" class="relife-comment-form" style="display:none;">
           <div class="relife-comment-input-wrapper">
+            <div id="replyIndicator" class="relife-reply-indicator" style="display:none;">
+              <i class="bi bi-reply-fill"></i>
+              <span id="replyToName">Đang trả lời...</span>
+              <button id="cancelReply" class="relife-btn-cancel-reply">
+                <i class="bi bi-x-lg"></i>
+              </button>
+            </div>
             <textarea 
               id="commentText" 
               class="relife-comment-input" 
@@ -118,10 +125,41 @@
   <!-- Hidden Quill Renderer -->
   <div id="__qs_hidden_renderer" aria-hidden="true" style="display:none"></div>
 
+  <!-- Report Modal -->
+  <div class="relife-report-modal-overlay" id="reportOverlay"></div>
+  <div class="relife-report-modal" id="reportModal">
+    <h3><i class="bi bi-flag-fill"></i> Báo cáo bình luận</h3>
+    <div class="relife-report-reason">
+      <label>
+        <input type="radio" name="reportReason" value="spam">
+        <span>Spam hoặc quảng cáo</span>
+      </label>
+      <label>
+        <input type="radio" name="reportReason" value="offensive">
+        <span>Nội dung xúc phạm</span>
+      </label>
+      <label>
+        <input type="radio" name="reportReason" value="inappropriate">
+        <span>Không phù hợp</span>
+      </label>
+      <label>
+        <input type="radio" name="reportReason" value="other" checked>
+        <span>Lý do khác</span>
+      </label>
+    </div>
+    <div class="relife-report-buttons">
+      <button class="relife-btn-cancel" onclick="window.closeReportModal()">Hủy</button>
+      <button class="relife-btn-danger" onclick="window.submitReport()">Báo cáo</button>
+    </div>
+  </div>
+
+  <!-- Mention Dropdown -->
+  <div class="relife-mention-dropdown" id="mentionDropdown"></div>
+
   <!-- Version Badge -->
   <div class="relife-version-badge">
     <span class="relife-version-label">Relife UI</span>
-    <span class="relife-version-number">1.0</span>
+    <span class="relife-version-number">1.1</span>
   </div>
 
   <!-- Libraries -->
