@@ -1,6 +1,6 @@
-// JS/post.js - Relife UI 1.2 Enhanced
-// NEW: Follow system, Reply to comments, Delete comments, Author badge
-// UPDATE: Fixed indent + Color coding, Scroll to comment with highlight
+// JS/post.js - Relife UI 1.5.2 FINAL - Report Fix
+// FIX: Initialize reportCount: 0 when creating comments
+// FIX: Proper error handling for report feature
 import { initFirebase } from '../firebase-config.js';
 import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-auth.js";
 import {
@@ -708,7 +708,7 @@ function watchRealtime() {
   commentsUnsub = onSnapshot(q, snap => {
     renderComments(snap);
     
-    // NEW: Update comment count from snapshot.size (ALWAYS ACCURATE)
+    // Update comment count from snapshot.size (ALWAYS ACCURATE)
     const actualCount = snap.size;
     document.getElementById('commentCountBtn').textContent = actualCount;
     document.getElementById('commentCount').textContent = actualCount;
@@ -723,7 +723,6 @@ function watchRealtime() {
     const disEl = document.getElementById('dislikeCount');
     if(likeEl) likeEl.textContent = d.likes || 0;
     if(disEl) disEl.textContent = d.dislikes || 0;
-    // NOTE: commentsCount NO LONGER USED (using snapshot.size instead)
   });
 }
 
@@ -800,7 +799,7 @@ function renderCommentElement(comment, index, currentUser, depth, hasReplies, re
   const isOwnComment = currentUser && comment.userId === currentUser.uid;
   const isAuthor = currentPostData && comment.userId === currentPostData.userId;
   
-  // NEW: Check if highly reported (warning)
+  // Check if highly reported (warning)
   const reportCount = comment.reportCount || 0;
   const isReported = reportCount >= 3; // Threshold: 3 reports
   
@@ -820,10 +819,10 @@ function renderCommentElement(comment, index, currentUser, depth, hasReplies, re
     `;
   }
   
-  // NEW: Parse mentions in text
+  // Parse mentions in text
   const displayText = parseMentions(comment.text, comment.mentions || []);
   
-  // NEW: Edited badge
+  // Edited badge
   let editedBadge = '';
   if(comment.editedAt) {
     editedBadge = `
@@ -834,7 +833,7 @@ function renderCommentElement(comment, index, currentUser, depth, hasReplies, re
     `;
   }
   
-  // NEW: Report warning badge
+  // Report warning badge
   let reportBadge = '';
   if(isReported) {
     reportBadge = `
@@ -920,7 +919,7 @@ function renderCommentElement(comment, index, currentUser, depth, hasReplies, re
 }
 
 /**
- * NEW: Parse @mentions in comment text
+ * Parse @mentions in comment text
  */
 function parseMentions(text, mentionedUserIds) {
   if(!mentionedUserIds || mentionedUserIds.length === 0) {
@@ -942,7 +941,7 @@ function parseMentions(text, mentionedUserIds) {
 }
 
 /**
- * NEW: Navigate to mentioned user's profile
+ * Navigate to mentioned user's profile
  */
 window.navigateToMention = async function(tagName) {
   try {
@@ -1183,7 +1182,7 @@ function bindEvents() {
     }
   });
 
-  // Send comment
+  // Send comment - ✅ FIX: Initialize reportCount: 0
   document.getElementById('sendComment').addEventListener('click', async () => {
     const text = document.getElementById('commentText').value.trim();
     if(!text) return alert('Viết bình luận trước khi gửi.');
@@ -1198,7 +1197,7 @@ function bindEvents() {
       const udoc = await getDoc(doc(db, 'users', user.uid));
       const prof = udoc.exists() ? udoc.data() : null;
       
-      // NEW: Extract and resolve mentions
+      // Extract and resolve mentions
       const mentions = extractMentions(text);
       const mentionedUserIds = await resolveMentions(mentions);
       
@@ -1207,8 +1206,8 @@ function bindEvents() {
         userId: user.uid,
         text,
         createdAt: serverTimestamp(),
-        mentions: mentionedUserIds,  // NEW
-        reportCount: 0               // NEW: Initialize
+        mentions: mentionedUserIds,
+        reportCount: 0  // ✅ FIX: Initialize from start
       };
       
       // Add reply info if replying
@@ -1247,7 +1246,7 @@ function bindEvents() {
       document.getElementById('loginNotice').style.display = 'none';
       document.getElementById('commentFormArea').style.display = 'block';
       
-      // NEW: Setup mention autocomplete for main comment input
+      // Setup mention autocomplete for main comment input
       const commentTextarea = document.getElementById('commentText');
       if(commentTextarea) {
         setupMentionAutocomplete(commentTextarea);
@@ -1358,11 +1357,11 @@ document.addEventListener('visibilitychange', () => {
 load();
 
 // ═══════════════════════════════════════════════════════════
-// NEW v1.5 FEATURES
+// v1.5 NEW FEATURES: Edit, Report, Mention
 // ═══════════════════════════════════════════════════════════
 
 /**
- * NEW: Edit comment
+ * Edit comment
  */
 let currentEditingCommentId = null;
 
@@ -1453,7 +1452,7 @@ window.saveEdit = async function(commentId) {
 };
 
 /**
- * NEW: Extract @mentions from text
+ * Extract @mentions from text
  */
 function extractMentions(text) {
   const mentionRegex = /@(\w+)/g;
@@ -1466,7 +1465,7 @@ function extractMentions(text) {
 }
 
 /**
- * NEW: Resolve @mentions to user IDs
+ * Resolve @mentions to user IDs
  */
 async function resolveMentions(mentions) {
   if(mentions.length === 0) return [];
@@ -1490,7 +1489,7 @@ async function resolveMentions(mentions) {
 }
 
 /**
- * NEW: Setup mention autocomplete
+ * Setup mention autocomplete
  */
 function setupMentionAutocomplete(textarea) {
   const dropdown = document.getElementById('mentionDropdown');
@@ -1534,7 +1533,7 @@ function setupMentionAutocomplete(textarea) {
 }
 
 /**
- * NEW: Search users for mention
+ * Search users for mention
  */
 async function searchUsersForMention(query, dropdown, textarea, atPos) {
   try {
@@ -1598,7 +1597,7 @@ async function searchUsersForMention(query, dropdown, textarea, atPos) {
 }
 
 /**
- * NEW: Report comment
+ * Report comment - ✅ FIXED VERSION
  */
 let currentReportCommentId = null;
 
@@ -1625,9 +1624,13 @@ window.submitReport = async function() {
   
   // Get selected reason
   const reasonRadio = document.querySelector('input[name="reportReason"]:checked');
-  const reason = reasonRadio ? reasonRadio.value : 'other';
+  let reason = reasonRadio ? reasonRadio.value : 'other';
   
+  // 💡 Đảm bảo giá trị reason là chữ thường để khớp với Rules (dù HTML bạn đã đúng)
+  reason = reason.toLowerCase(); 
+
   try {
+    // Check if already reported (GET operation does not require special rules)
     const reportRef = doc(db, 'posts', postId, 'comments', currentReportCommentId, 'reports', user.uid);
     const reportDoc = await getDoc(reportRef);
     
@@ -1637,28 +1640,35 @@ window.submitReport = async function() {
       return;
     }
     
-    // Add report
+    // ✅ FIX: Use batch for atomic writes
     const batch = writeBatch(db);
     
+    // 1. Create Report Document (MUST use doc(user.uid) to match Rules)
     batch.set(reportRef, {
       userId: user.uid,
-      reason,
+      reason: reason,
       createdAt: serverTimestamp()
     });
     
-    batch.update(doc(db, 'posts', postId, 'comments', currentReportCommentId), {
-      reportCount: increment(1)
-    });
+    // 2. Increment reportCount on Comment
+    // ⚠️ CHỈNH SỬA TẠI ĐÂY: Dùng batch.set({...}, {merge: true}) để đảm bảo Rules chấp nhận
+    const commentRef = doc(db, 'posts', postId, 'comments', currentReportCommentId);
+    batch.set(commentRef, { 
+      reportCount: increment(1) 
+    }, { merge: true }); // <--- Đây là mấu chốt
     
     await batch.commit();
     
+    console.log('Report submitted successfully');
     alert('Đã gửi báo cáo. Cảm ơn bạn!');
     window.closeReportModal();
   } catch(err) {
     console.error('Report error:', err);
-    alert('Không thể gửi báo cáo. Vui lòng thử lại.');
+    alert('Không thể gửi báo cáo. Vui lòng thử lại.\n\nLỗi: ' + (err.message || err.code || err));
   }
 };
+
+
 
 // Close report modal on overlay click
 document.getElementById('reportOverlay').addEventListener('click', window.closeReportModal);

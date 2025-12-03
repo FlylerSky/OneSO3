@@ -992,9 +992,9 @@ function showEditForm(profile, uid){
           class="form-control" 
           rows="4"
           placeholder="Viết vài dòng về bản thân..."
-          maxlength="500">${esc(profile.bio||'')}</textarea>
+          maxlength="1000">${esc(profile.bio||'')}</textarea>
         <div class="form-note">
-          <span id="bioCounter">0</span>/500 ký tự
+          <span id="bioCounter">0</span>/1000 ký tự
         </div>
       </div>
       
