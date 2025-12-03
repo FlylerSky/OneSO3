@@ -11,38 +11,49 @@ Fields:
   - content: string        // HTML sinh ra từ Quill (có thể chứa <p>, <ol>, <ul>, <img>, <iframe>, ...)
   - displayName: string    // tên hiển thị của tác giả tại thời điểm đăng
   - authorTag: string|null // tagName của tác giả (vd: "@lan123"), có thể null
-  - userId: string         // uid của tác giả (Firestore Auth UID)
-  - likes: int             // tổng số lượt like (default 0)
-  - dislikes: int          // tổng số lượt dislike (default 0)
-  - commentsCount: int     // tổng số bình luận (default 0)
+  - userId: string         // uid của tác giả (Firestore Auth UID) - BẮT BUỘC, được kiểm tra trong rules
+  - likes: int             // tổng số lượt like (default 0) - BẮT BUỘC khi tạo, được kiểm tra và giới hạn +/- 1 trong rules
+  - dislikes: int          // tổng số lượt dislike (default 0) - BẮT BUỘC khi tạo, được kiểm tra và giới hạn +/- 1 trong rules
+  - commentsCount: int     // tổng số bình luận (default 0) - BẮT BUỘC khi tạo, được kiểm tra và giới hạn +/- 1 trong rules
   - hashtags: array<string>// mảng hashtag (vd: ["#game","#news"])
-  - createdAt: timestamp   // serverTimestamp() khi tạo
-  - updatedAt: timestamp?  // optional, serverTimestamp() khi chỉnh sửa
+  - createdAt: timestamp   // serverTimestamp() khi tạo - BẮT BUỘC, được kiểm tra trong rules, không thể thay đổi sau khi tạo
+  - updatedAt: timestamp?  // optional, serverTimestamp() khi chỉnh sửa - Được phép update bởi owner
   - (các trường khác có thể tồn tại tùy implement nhưng nội dung chính là trên)
 
 Subcollections under posts:
   posts/{postId}/comments
     Document ID: {commentId}
     Fields:
-      - userId: string        // uid của người bình luận
-      - displayName: string  // tên hiển thị của người bình luận (lưu để hiện thị nhanh)
-      - text: string         // nội dung bình luận (plain text)
-      - createdAt: timestamp // serverTimestamp()
-      - (không cho edit text theo rules, chỉ cho phép cập nhật displayName bởi chủ comment)
+      - userId: string        // uid của người bình luận - BẮT BUỘC, được kiểm tra trong rules
+      - displayName: string  // tên hiển thị của người bình luận (lưu để hiện thị nhanh) - BẮT BUỘC khi tạo, chủ sở hữu comment có thể cập nhật
+      - text: string         // nội dung bình luận (plain text) - BẮT BUỘC khi tạo, chủ sở hữu comment có thể cập nhật
+      - createdAt: timestamp // serverTimestamp() - BẮT BUỘC, được kiểm tra trong rules
+      - mentions: array<string|map>? // optional, các đối tượng được @mention trong bình luận - Chủ sở hữu comment có thể cập nhật
+      - editedAt: timestamp?  // optional, serverTimestamp() khi chỉnh sửa - Chủ sở hữu comment có thể cập nhật
+      - editCount: int?       // optional, số lần chỉnh sửa bình luận - Chủ sở hữu comment có thể cập nhật
+      - reportCount: int?     // optional, số lượt báo cáo (khởi tạo 0 hoặc 1 nếu chưa có) - Bất kỳ người dùng xác thực nào cũng có thể tăng lên (+1)
+
+    Subcollection under comments:
+      posts/{postId}/comments/{commentId}/reports
+        Document ID: {reporterId} // uid của người dùng thực hiện báo cáo - BẮT BUỘC phải trùng với `request.auth.uid`
+        Fields:
+          - userId: string        // uid của người dùng đã báo cáo (trùng với {reporterId}) - BẮT BUỘNG, được kiểm tra trong rules
+          - reason: string        // lý do báo cáo (vd: 'spam', 'offensive', 'inappropriate', 'other') - BẮT BUỘC, được kiểm tra trong rules
+          - createdAt: timestamp  // serverTimestamp() khi tạo báo cáo - Được phép sử dụng serverTimestamp()
 
   posts/{postId}/likes
-    Document ID: {likeId}    // thường dùng uid của user làm id
+    Document ID: {likeId}    // thường dùng uid của user làm id - BẮT BUỘC phải trùng với `request.auth.uid`
     Fields:
-      - userId: string
-      - type: string         // 'like' hoặc 'dislike'
-      - createdAt: timestamp
-      - updatedAt: timestamp? // khi đổi type (like <-> dislike)
+      - userId: string        // uid của người dùng tương tác - BẮT BUỘC, được kiểm tra trong rules
+      - type: string          // 'like' hoặc 'dislike' - BẮT BUỘC, được kiểm tra trong rules
+      - createdAt: timestamp  // serverTimestamp() - BẮT BUỘC, được kiểm tra trong rules
+      - updatedAt: timestamp? // khi đổi type (like <-> dislike) - Được phép update bởi owner
 
 ------------------------------------------------------------
 Collection: users
 Document ID: {userId}
 Fields:
-  - email: string
+  - email: string           // BẮT BUỘC khi tạo, được kiểm tra trong rules
   - displayName: string
   - tagName: string|null       // Tag Name Search (unique, dạng "@name")
   - avatarUrl: string|null
@@ -52,17 +63,17 @@ Fields:
   - country: string|null
   - activated: boolean         // trạng thái kích hoạt tài khoản
   - activationCode: string?    // (admin thêm thủ công) dùng cho lần kích hoạt đầu
-  - followersCount: int?       // (optional) có thể không tồn tại; hệ thống còn dùng collection followers để tính size
-  - followingCount: int?       // (optional)
+  - followersCount: int?       // (optional) có thể không tồn tại; hệ thống còn dùng collection followers để tính size - Được kiểm soát +/- 1 hoặc đặt về 1 nếu chưa có
+  - followingCount: int?       // (optional) - Được kiểm soát +/- 1 hoặc đặt về 1 nếu chưa có
   - createdAt: timestamp
   - updatedAt: timestamp?
 
 Subcollections under users:
   users/{userId}/followers/{followerId}
-    Document ID: {followerId}  // thường là uid của follower
+    Document ID: {followerId}  // uid của follower - BẮT BUỘC phải trùng với `request.auth.uid`
     Fields:
-      - userId: string         // uid của follower
-      - createdAt: timestamp
+      - userId: string         // uid của follower - BẮT BUỘC, được kiểm tra trong rules
+      - createdAt: timestamp   // serverTimestamp() - BẮT BUỘC, được kiểm tra trong rules
       - displayName: string?   // snapshot tên/ảnh của follower tại thời điểm follow
       - avatarUrl: string?     // optional
       - tagName: string?       // optional
@@ -70,19 +81,19 @@ Subcollections under users:
   users/{userId}/following/{followingId}
     Document ID: {followingId} // uid của người được follow
     Fields:
-      - userId: string         // uid của target
-      - createdAt: timestamp
+      - userId: string         // uid của target - BẮT BUỘC, được kiểm tra trong rules
+      - createdAt: timestamp   // serverTimestamp() - BẮT BUỘC, được kiểm tra trong rules
       - displayName: string?   // optional snapshot
       - avatarUrl: string?     // optional
 
   users/{userId}/visitors/{visitorId}
-    Document ID: {visitorId}  // uid của visitor (người ghé thăm)
+    Document ID: {visitorId}  // uid của visitor (người ghé thăm) - BẮT BUỘC phải trùng với `request.auth.uid`
     Fields:
-      - userId: string         // uid của visitor
+      - userId: string         // uid của visitor - BẮT BUỘC, được kiểm tra trong rules
       - displayName: string?   // tên hiển thị nếu có (lấy từ users/{visitorId} khi lưu)
       - tagName: string?       // tagName nếu có
       - avatarUrl: string?     // avatar snapshot hoặc photoURL
-      - lastVisitedAt: timestamp // serverTimestamp() khi visite lại (merge/update)
+      - lastVisitedAt: timestamp // serverTimestamp() khi visite lại (merge/update) - BẮT BUỘC, được kiểm tra trong rules
 
 ------------------------------------------------------------
 Collection: searchStats
@@ -91,14 +102,16 @@ Fields:
   - term: string
   - count: int
   - updatedAt: timestamp
+  // Lưu ý: Collection này cho phép đọc và ghi hoàn toàn tự do theo rules.
 
 ------------------------------------------------------------
-Ghi chú / Hành vi liên quan:
-- Nhiều thao tác tạo (create) dùng serverTimestamp() cho createdAt.
-- Counters như likes/dislikes/commentsCount có thể được cập nhật bởi client (increment) hoặc maintain bằng server/Cloud Function; trong One Social hiện có logic client-side + rules kiểm soát.
-- Một số trường (followersCount/followingCount) có thể tồn tại nhưng hệ thống cũng dựa vào kích thước subcollection followers/following để lấy số thực tế.
-- posts.content chứa HTML do Quill, do đó các media (iframe/img) nhúng trong content — hiển thị phụ thuộc frontend.
-- Comment documents giữ displayName tĩnh (để hiển thị lịch sử); khi user đổi tên, hệ thống có chức năng propagate để cập nhật displayName trong các comments do user đó viết (cần rules cho phép owner update đúng field displayName của comment).
+Ghi chú / Hành vi liên quan (Cập nhật):
+- Nhiều thao tác tạo (create) sử dụng `serverTimestamp()` cho các trường `createdAt`, `lastVisitedAt` để đảm bảo tính nhất quán thời gian trên server. Firebase Security Rules kiểm tra nghiêm ngặt điều này.
+- Các bộ đếm (counters) như `likes`, `dislikes`, `commentsCount`, `followersCount`, `followingCount` có thể được cập nhật an toàn bằng cách tăng/giảm `±1` từ phía client thông qua `FieldValue.increment()`. Security Rules được thiết lập để chỉ cho phép các thay đổi chính xác này, hoặc khởi tạo về `1` nếu trường chưa tồn tại.
+- Fields `posts.{postId}.content` chứa HTML do Quill editor tạo ra, bao gồm các thẻ như `<img>` hoặc `<iframe>`. Việc hiển thị và xử lý các nội dung nhúng này phụ thuộc vào cách triển khai ở phía frontend.
+- `posts.{postId}.comments.{commentId}`:
+    - **Nội dung bình luận (`text`) giờ đây có thể được chỉnh sửa bởi chủ sở hữu bình luận**, cùng với các trường `mentions`, `editedAt`, và `editCount`. Điều này khác với ghi chú trước đó của bạn.
+    - `displayName` của bình luận được phép cập nhật bởi chủ sở hữu bình luận. Điều này hỗ trợ việc cập nhật đồng bộ khi người dùng thay đổi tên hiển thị của họ.
 
 ------------------------------------------------------------
 (End of data schema)

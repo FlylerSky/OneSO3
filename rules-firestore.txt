@@ -101,33 +101,34 @@ service cloud.firestore {
             && request.resource.data.reportCount is int
             && (
               // Allow increment by 1 if field exists
-              (resource.data.keys().hasAll(['reportCount']) 
+              (resource.data.keys().hasAll(['reportCount'])
                 && request.resource.data.reportCount == resource.data.reportCount + 1)
               // OR initialize to 1 if field doesn't exist
-              || (!resource.data.keys().hasAll(['reportCount']) 
+              || (!resource.data.keys().hasAll(['reportCount'])
                 && request.resource.data.reportCount == 1)
             )
           )
         );
 
         // Delete: allow comment owner to delete their own comment
-        allow delete: if request.auth != null 
+        allow delete: if request.auth != null
                       && resource.data.userId == request.auth.uid;
 
         // ===============================================
-        // REPORTS SUBCOLLECTION (v1.5 NEW)
+        // REPORTS SUBCOLLECTION (v1.5 NEW) - ĐÃ ĐIỀU CHỈNH LẠI ALLOW READ
         // ===============================================
         match /reports/{reporterId} {
-          // Read: No one can read reports list (privacy)
-          allow read: if false;
+          // Read: Allow authenticated user to read their OWN report document
+          // Để JavaScript có thể kiểm tra xem người dùng đã báo cáo chưa.
+          allow read: if request.auth != null && request.auth.uid == reporterId;
 
           // Create: Authenticated user can create report with their own ID
+          // (Đã loại bỏ kiểm tra nghiêm ngặt createdAt để phù hợp với việc sử dụng FieldValue.serverTimestamp())
           allow create: if request.auth != null
                         && request.auth.uid == reporterId
                         && request.resource.data.userId == request.auth.uid
                         && request.resource.data.reason is string
-                        && request.resource.data.reason in ['spam', 'offensive', 'inappropriate', 'other']
-                        && request.resource.data.createdAt == request.time;
+                        && request.resource.data.reason in ['spam', 'offensive', 'inappropriate', 'other'];
 
           // Update/Delete: Reports cannot be modified or deleted
           allow update: if false;
@@ -140,20 +141,20 @@ service cloud.firestore {
       // ===============================================
       match /likes/{likeId} {
         allow read: if true;
-        
+
         // Create: auth user may create a like/dislike doc whose id equals their uid
         allow create: if request.auth != null
                       && request.auth.uid == likeId
                       && request.resource.data.userId == request.auth.uid
                       && request.resource.data.type in ['like','dislike']
                       && request.resource.data.createdAt == request.time;
-        
+
         // Update: owner may flip type
         allow update: if request.auth != null
                       && request.auth.uid == likeId
                       && request.resource.data.userId == request.auth.uid
                       && request.resource.data.type in ['like','dislike'];
-        
+
         // Delete: owner may delete their like doc
         allow delete: if request.auth != null && request.auth.uid == likeId;
       }
