@@ -1,0 +1,241 @@
+# Mô tả chi tiết hoạt động — các trang `index`, `post`, `tag`, `profile` của One Social
+
+Dưới đây là tài liệu mô tả đầy đủ cách hoạt động hiện tại của từng trang, các tính năng, luồng dữ liệu và tương tác với Firestore / Auth. Mình viết theo trạng thái source code và rules mà bạn đã cung cấp/điều chỉnh — **chỉ liệt kê những gì thật sự đang có** (không thêm tính năng tưởng tượng).
+
+---
+
+# 1. Trang `index.html` (Trang chủ / feed)
+
+## Mục đích
+
+Hiển thị danh sách bài viết (feed), cho phép:
+
+* xem tóm tắt bài viết,
+* like / dislike,
+* mở modal bình luận để xem/viết bình luận,
+* truy cập vào `post.html` để xem full bài,
+* click vào tên user dẫn tới profile của họ,
+* tìm kiếm bài (client-side),
+* tạo bài mới (trình soạn Quill) — nếu là user hợp lệ.
+
+## Giao diện chính
+
+* Thanh nav trên cùng có search input (tìm người/bài) và menu.
+* Danh sách bài (mỗi item hiển thị): tên người đăng (displayName), tagName (authorTag), tiêu đề, hashtags, số likes, dislikes, số bình luận, nút comment (icon bong bóng) và nút xem bài (link tới `post.html?id=...`).
+* Nút "Viết bài" / editor (Quill) ở đầu — hiển thị modal editor để tạo/chỉnh sửa bài (tiêu đề, nội dung quill, hashtags).
+
+## Luồng dữ liệu & realtime
+
+* Khi trang load, client tạo query `collection('posts')` (có thể `where` / `orderBy` theo createdAt) và `onSnapshot` để nhận realtime updates — posts hiển thị luôn theo snapshot.
+* Khi user nhấn Like/Dislike:
+
+  * Client kiểm tra tồn tại `posts/{postId}/likes/{uid}`.
+  * Thực hiện `writeBatch`: tạo/upd/delete document `likes/{uid}` và đồng bộ cập nhật counters ở `posts/{postId}` (increment/decrement). Sau commit, client gọi `getDoc(postRef)` để lấy counts mới và cập nhật UI.
+  * Nếu batch bị `permission-denied` do rules, lỗi được catch, log/alert tùy cấu hình; UI sẽ phản ánh thông qua snapshot khi server state thay đổi.
+* Khi user mở modal bình luận:
+
+  * Subcribe `posts/{postId}/comments` bằng `onSnapshot` (orderBy createdAt desc).
+  * Giao diện hiển thị danh sách bình luận.
+  * Viết bình luận: client `addDoc` vào `posts/{postId}/comments` với `createdAt: serverTimestamp()`. Sau đó cố gắng `updateDoc(posts/{postId}, { commentsCount: increment(1) })`. Nếu update counter bị rules chặn, comment vẫn ở DB; client chỉ log warning (không báo lỗi gây nhầm lẫn).
+* Tìm kiếm:
+
+  * Có tìm kiếm client-side (lọc các posts đã load) và có tính năng tìm user (từ trước). Click vào tên user dẫn tới `profile.html?user={uid}`.
+
+## Quyền & security (tương tác với rules)
+
+* Tạo comment, like/dislike yêu cầu `request.auth != null` theo rules.
+* Tạo post: tùy rules hiện hành có thể cho phép authenticated user hoặc có branch cho anonymous (xuất phát từ thiết kế ban đầu). (Hãy kiểm tra rules nếu cần thay đổi policy.)
+
+## Lưu ý giao diện / CSS
+
+* Nội dung dài (link) trong bình luận đã được xử lý bằng CSS (`word-break`, `overflow-wrap`) để không tràn modal.
+* Các iframe/hình ảnh trong post preview được bo góc bằng CSS (nâng hạnh ảnh/iframe thẩm mỹ).
+
+---
+
+# 2. Trang `post.html` (Xem bài viết đầy đủ)
+
+## Mục đích
+
+Hiển thị toàn bộ nội dung một bài viết (content do Quill sinh ra — HTML). Cho phép:
+
+* xem nội dung dài, media (images, iframe),
+* xem/viết bình luận (modal hoặc section),
+* like / dislike,
+* chia sẻ link bài viết,
+* xem số lượt và tương tác realtime.
+
+## Giao diện chính
+
+* Tiêu đề, metadata (tác giả, tag authorTag, createdAt).
+* Phần nội dung (`post.content`) hiển thị dưới dạng HTML; frontend áp dụng CSS để:
+
+  * bo góc cho iframe/hình ảnh,
+  * sửa lỗi danh sách (bullet list) khi Quill lưu dạng `<ol><li data-list="bullet">...` — có xử lý để hiển thị bullet chấm thay vì đánh số (fix được bằng CSS/JS transform).
+* Phần tương tác: nút like/dislike (hiệu ứng disable khi xử lý), nút bình luận (mở modal), nút share.
+
+## Luồng dữ liệu & realtime
+
+* Mở trang: client `getDoc(postRef)` và subscribe nếu cần `onSnapshot` để cập nhật realtime (likes/dislikes/commentsCount).
+* Like/Dislike: cùng logic như ở `index.html` (batch set/delete `posts/{postId}/likes/{uid}` + update counters trên `posts/{postId}`).
+* Bình luận: addDoc comment subcollection rồi cố gắng increment comment counter (best-effort).
+* Nếu client gặp lỗi permission-denied khi cập nhật counters, comment vẫn có hiệu lực, UI realtime sẽ phản ánh thay đổi khi server state thay đổi.
+
+## Media handling
+
+* Hình ảnh / iframe hiển thị trong nội dung bài; có CSS để bo góc.
+* (Hiện tại viewer ảnh riêng biệt chưa chắc chắn được triển khai đầy đủ — ảnh hiển thị inline; các cải tiến viewer có thể đang thảo luận/triển khai sau.)
+
+---
+
+# 3. Trang `tag.html` (Hashtag / Topic page)
+
+## Mục đích
+
+* Thống kê hashtag (topic) mà người dùng sử dụng, hiển thị top hashtags, danh sách bài thuộc hashtag đó, ranking bài viết theo tiêu chí (số likes, date, v.v.).
+
+## Giao diện chính
+
+* Danh sách các hashtag (mỗi hashtag hiển thị: tên hashtag, số bài / trend).
+* Khi chọn 1 hashtag (query param `tag=...`), load danh sách posts chứa hashtag đó (Firestore query: `where('hashtags', 'array-contains', '#tag')`), hiển thị tương tự feed (tên, tiêu đề, snippet, likes, comments).
+
+## Luồng dữ liệu
+
+* Khi trang load, thực hiện query để lấy posts chứa hashtag.
+* Có thể subscribe realtime hoặc load page-by-page tùy implementation.
+* Không có nhiều interaction đặc thù khác ngoài like/comment/view như trên index/post.
+
+---
+
+# 4. Trang `profile.html` (Trang hồ sơ người dùng)
+
+## Mục đích
+
+Hiển thị thông tin cá nhân của user, danh sách bài đăng của họ, cho phép:
+
+* xem avatar, displayName, tagName, thông tin cơ bản (gender, birthday, country),
+* xem bio,
+* xem số followers / following,
+* follow / unfollow,
+* xem danh sách bài của user (hiển thị giống index — có like/dislike/comment/view),
+* nếu là owner (người đăng nhập đúng profile) có thể chỉnh sửa profile (displayName, tagName, bio), thêm/sửa/xóa bài,
+* xem “Thành tích” (achievement modal),
+* xem “Khách ghé thăm” (visitors modal),
+* visitor recording: khi user A xem page profile của user B, một document `users/B/visitors/A` được tạo/update với `lastVisitedAt`, `displayName`, `tagName`, `avatarUrl`.
+
+## Giao diện chính
+
+* Header profile: avatar (circle), displayName, tagName, basic info, follow stats (Followers / Following).
+* Hành động chính (ở header bên phải): nếu visitor thì nút Follow / Unfollow; nếu owner thì nút Chỉnh sửa và Thêm bài.
+* Danh sách bài: hiển thị như feed (title, hashtags, likes, commentsCount).
+* Modals:
+
+  * Comments modal (như index) — xem/viết comment.
+  * Post editor modal (Quill) — tạo/chỉnh sửa bài (owner).
+  * Achievements modal — hiển thị progress theo mốc thời gian.
+  * Visitors modal — danh sách khách, cho owner xem; hiển thị avatar, displayName, tagName, lastVisitedAt; click dẫn đến profile của visitor.
+
+## Luồng dữ liệu & realtime
+
+* Khi load profile: `getDoc(users/{uid})` để lấy profile data; subscribe posts `where('userId','==', uid)` để realtime load bài.
+* Visitors recording: nếu `currentUser` và khác owner → client `setDoc(users/{profileUid}/visitors/{currentUser.uid}, {..., lastVisitedAt: serverTimestamp() }, { merge: true })`. Kết quả: nếu visitor quay lại, `lastVisitedAt` cập nhật (không duplicate).
+* Followers / Following:
+
+  * Follow action: client tách bước:
+
+    1. `setDoc(users/{profileId}/followers/{currentUid})`
+    2. `setDoc(users/{currentUid}/following/{profileId})`
+    3. (trước đây cố update counters trên `users/*`, nhưng hiện hệ thống sử dụng snapshot size của subcollections để hiển thị counts — giảm permission errors)
+  * Unfollow: xóa 2 doc tương ứng.
+  * UI followers/following count dùng `onSnapshot` lên `users/{uid}/followers` và `.../following` và hiển thị `snap.size` (độ chính xác).
+* Edit profile propagation:
+
+  * Khi owner thay đổi `displayName` hoặc `tagName`, client:
+
+    1. cập nhật `users/{uid}` (updateDoc),
+    2. chạy `propagateProfileToPostsAndComments(uid, { displayName: newName, authorTag: newTag })`:
+
+       * update tất cả `posts` có `userId == uid` (update post doc fields),
+       * tìm tất cả `posts/{postId}/comments` với `userId == uid` và update `displayName` trong từng comment doc.
+    3. Để propagate comments thành công, Firestore Rules đã được chỉnh để cho phép **chủ comment** chỉ update field `displayName` (không cho edit text).
+  * Propagate implement có cơ chế chunking và fallback: cố batch commit; nếu batch bị error (permission), sẽ thử update từng comment riêng lẻ và log những comment fail để debug.
+
+## Quyền & an toàn
+
+* Để hạn chế gian lận counters / race:
+
+  * Counters `followersCount`/`followingCount` không phụ thuộc vào client update (client cố gắng, nhưng UI chủ yếu dựa vào subcollection size).
+  * Likes/comments counters ở `posts` có quy tắc update ±1 trong rules; vẫn có kịch bản fallback (nếu client không được phép update post doc, comment vẫn tạo).
+* Visitors collection chỉ có thể `read` bởi owner (rule), vì vậy modal Visitors chỉ hiện cho chính chủ.
+
+---
+
+# Hành vi lỗi / xử lý exception (hiện hành)
+
+* Mọi thao tác ghi quan trọng (create like, add comment, follow) đều nằm trong `try/catch`. Nếu fail do `permission-denied`:
+
+  * Một số thao tác (thêm comment) sẽ không block — comment tạo xong rồi warn nếu increment counter fail.
+  * Một số thao tác (follow step tạo `followers`/`following` doc) thực hiện theo từng bước với rollback best-effort (nếu tạo following fail thì xóa follower đã tạo).
+  * Reaction (like/dislike) dùng `writeBatch` để duy trì đồng bộ trên `likes` subcollection và counters; nếu batch bị deny, thao tác bị cancel và user được báo.
+* Console logs / warnings được dùng để debug rule problems; modal alert chỉ hiện khi operation thực sự thất bại (ví dụ: không thể tạo comment).
+
+---
+
+# Firestore structure (nhận tóm tắt/ngắn)
+
+(Phần này tóm tắt mối quan hệ read/write, đã lưu chi tiết trong file `data-firestore` bạn có)
+
+* `posts/{postId}` (fields: title, content (HTML Quill), displayName, authorTag, userId, likes, dislikes, commentsCount, hashtags, createdAt, updatedAt)
+
+  * subcollections: `comments/{commentId}`, `likes/{uid}`
+* `users/{userId}` (fields: email, displayName, tagName, avatarUrl, bio, activated, activationCode, createdAt, ...)
+
+  * subcollections: `followers/{followerId}`, `following/{followingId}`, `visitors/{visitorId}`
+* `searchStats/{doc}`
+
+---
+
+# Các modal / component chung
+
+* Quill editor modal (post create/edit).
+* Comments modal (per post).
+* Login modal (đăng nhập; có luồng activationCode).
+* Achievements modal (profile).
+* Visitors modal (profile owner only).
+* Menu offcanvas (profile/index).
+
+---
+
+# Luồng xác thực và activation (signup/login)
+
+* Người dùng đăng ký → `users/{uid}` được tạo (email, other fields).
+* Lần đăng nhập đầu: nếu `users/{uid}.activated` chưa true → UI yêu cầu nhập `activationCode` (do admin thêm thủ công vào Firestore). Nếu match, client update `activated: true`.
+* Một số actions (comment, like, follow, create profile) require authenticated user. Rules enforce `request.auth != null` cho những thao tác này.
+
+---
+
+# Những lưu ý vận hành / kiến nghị (dựa trên hiện trạng)
+
+(Chỉ nêu tóm tắt vì bạn đã yêu cầu không thêm công nghệ):
+
+* Propagate profile → comments hiện hoạt động nhưng phụ thuộc Rules cho phép owner update `displayName` trong comment. Nếu Rules chặn, propagation sẽ gặp `permission-denied`.
+* Counters do client cập nhật có thể gặp race/permission issues; production-hardening nên dùng backend function (Cloud Function) để guarantee atomic increments — (nhưng mình không thêm vì bạn không muốn dùng Cloud Functions bây giờ).
+* Mọi thao tác ghi quan trọng đều có handling: tách bước, rollback best-effort, và fallback logs để debug.
+
+Tag Name Search của user có dạng "@<tên>", mỗi người có một tag Name Search duy nhất và không trùng nhau, Tag Name Search có vai trò quan trọng với các công cụ tìm kiếm của Relife
+-----
+Phiên bản được nêu: Relife 3 (relife_1.3.0.191125) và Relife 3.1
+Các tính năng mới:
+Relife 3: Thêm khả năng click vào Tên hiển thị- Tag Name Search- Avatar của người đăng bài tại header bài viết để chuyển đến Profile của họ
+- Thêm thẻ tác giả vào comment nếu comment đó là của tác giả đăng bài
+-Thêm khả năng xóa bình luận của mình
+-Thêm khả năng phản hồi bình luận của người khác, bình luận phản hồi sẽ gắn thẻ bình luận gốc, click vào sẽ tự động tua về bình luận gốc và có hiệu ứng highlight
+- Thêm khả năng follow user ngay tại trang xem bài (POST) [không áp dụng trong phần comment]
+Relife 3.1: Khắc phục lỗi không thể xóa comment
+- Thêm khả năng gắng thẻ người khác vào comment bằng tag Name Search
+- Thêm khả năng sửa bình luận của mình
+- Thêm khả năng báo cáo bình luận (các bình luận bị report quá nhiều từ các user khác nhau sẽ bị gắn thẻ đỏ)
+[<Các tính năng trên chỉ áp dụng trên trang POST>]
+- Thêm khả năng đổi avatar của mình trên trang Profile
+-Thêm mục sửa giới tính, quốc gia, sinh nhật
+- Đã điều chỉnh giới hạn viết mô tả trên Profile còn 1000 kí tự thay vì vô hạn
