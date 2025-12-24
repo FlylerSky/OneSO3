@@ -103,6 +103,10 @@ Fields:
   - count: int
   - updatedAt: timestamp
   // Lưu ý: Collection này cho phép đọc và ghi hoàn toàn tự do theo rules.
+  
+------------------------------------------------------------
+Collection: notification
+
 
 ------------------------------------------------------------
 Ghi chú / Hành vi liên quan (Cập nhật):

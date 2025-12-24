@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<title>Công cụ nén văn bản theo System Key</title>
+<style>
+body {
+    font-family: Arial, sans-serif;
+    background: #f4f6f8;
+    padding: 20px;
+}
+.container {
+    max-width: 800px;
+    margin: auto;
+    background: #fff;
+    padding: 20px;
+    border-radius: 8px;
+}
+textarea, input, select, button {
+    width: 100%;
+    margin-top: 10px;
+    padding: 10px;
+}
+textarea {
+    height: 120px;
+}
+button {
+    cursor: pointer;
+    background: #007bff;
+    color: white;
+    border: none;
+    border-radius: 4px;
+}
+button:hover {
+    background: #0056b3;
+}
+.row {
+    display: flex;
+    gap: 10px;
+}
+.row button {
+    flex: 1;
+}
+</style>
+</head>
+<body>
+
+<div class="container">
+<h2>🔐 Công cụ nén & giải mã văn bản</h2>
+
+<label>Văn bản gốc</label>
+<textarea id="inputText"></textarea>
+
+<label>System Key</label>
+<input type="text" id="systemKey" placeholder="Nhập System Key">
+
+<label>Cấp độ nén</label>
+<select id="level">
+    <option value="1">Thấp</option>
+    <option value="2">Trung bình</option>
+    <option value="3">Nén cao</option>
+    <option value="4">Siêu nén</option>
+</select>
+
+<div class="row">
+    <button onclick="encode()">Mã hóa / Nén</button>
+    <button onclick="decode()">Giải mã</button>
+</div>
+
+<label>Kết quả</label>
+<textarea id="outputText"></textarea>
+</div>
+
+<script>
+// ===== UTIL =====
+function keySeed(key) {
+    let seed = 0;
+    for (let i = 0; i < key.length; i++) {
+        seed += key.charCodeAt(i) * (i + 1);
+    }
+    return seed;
+}
+
+function shiftChar(c, shift) {
+    const code = c.charCodeAt(0);
+    if (code < 32 || code > 126) return c;
+    return String.fromCharCode(((code - 32 + shift) % 95) + 32);
+}
+
+// ===== ENCODE =====
+function encode() {
+    let text = document.getElementById("inputText").value;
+    let key = document.getElementById("systemKey").value;
+    let level = parseInt(document.getElementById("level").value);
+
+    if (!key) return alert("Cần nhập System Key");
+
+    let seed = keySeed(key);
+    let result = "";
+
+    // Dịch ký tự
+    for (let i = 0; i < text.length; i++) {
+        result += shiftChar(text[i], seed % 95);
+    }
+
+    if (level >= 2) {
+        result = result.replace(/[aeiou]/gi, c => String.fromCharCode(c.charCodeAt(0) + 1));
+    }
+
+    if (level >= 3) {
+        result = btoa(unescape(encodeURIComponent(result)));
+    }
+
+    if (level === 4) {
+        result = result.replace(/=/g, "").replace(/[AEIOU]/g, "");
+    }
+
+    document.getElementById("outputText").value = result;
+}
+
+// ===== DECODE =====
+function decode() {
+    let text = document.getElementById("inputText").value;
+    let key = document.getElementById("systemKey").value;
+    let level = parseInt(document.getElementById("level").value);
+
+    if (!key) return alert("Cần nhập System Key");
+
+    let seed = keySeed(key);
+    let result = text;
+
+    if (level === 4) {
+        while (result.length % 4 !== 0) result += "=";
+    }
+
+    if (level >= 3) {
+        try {
+            result = decodeURIComponent(escape(atob(result)));
+        } catch {
+            return alert("Sai System Key hoặc dữ liệu không hợp lệ");
+        }
+    }
+
+    if (level >= 2) {
+        result = result.replace(/[bfjpv]/gi, c => String.fromCharCode(c.charCodeAt(0) - 1));
+    }
+
+    let finalText = "";
+    for (let i = 0; i < result.length; i++) {
+        finalText += shiftChar(result[i], 95 - (seed % 95));
+    }
+
+    document.getElementById("outputText").value = finalText;
+}
+</script>
+
+</body>
+</html>

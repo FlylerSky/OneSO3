@@ -3,13 +3,19 @@ service cloud.firestore {
   match /databases/{database}/documents {
 
     // ===============================================
+    // SYSTEM VERSION (PUBLIC READ, ADMIN WRITE ONLY)
+    // ===============================================
+    match /system/{doc} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    // ===============================================
     // POSTS COLLECTION
     // ===============================================
     match /posts/{postId} {
-      // Public read
       allow read: if true;
 
-      // Create: authenticated users may create posts (userId must match) OR anonymous allowed (legacy)
       allow create: if
         request.resource.data.createdAt == request.time
         && request.resource.data.likes == 0
@@ -20,14 +26,9 @@ service cloud.firestore {
           || (request.auth == null)
         );
 
-      // Delete: only owner
       allow delete: if request.auth != null && resource.data.userId == request.auth.uid;
 
-      // Update:
-      // - Owner can update post content (not reaction/comment counters)
-      // - Authenticated users may change reaction counters and commentsCount in controlled ±1 steps
       allow update: if (
-        // owner editing content (must not change counters)
         (request.auth != null
           && resource.data.userId == request.auth.uid
           && request.resource.data.createdAt == resource.data.createdAt
@@ -35,14 +36,12 @@ service cloud.firestore {
           && !request.resource.data.diff(resource.data).changedKeys().hasAny(['likes','dislikes','commentsCount'])
         )
         ||
-        // controlled counter-only updates by authenticated users
         (
           request.auth != null
           && request.resource.data.diff(resource.data).changedKeys().hasOnly(['likes','dislikes','commentsCount'])
           && request.resource.data.likes is int
           && request.resource.data.dislikes is int
           && request.resource.data.commentsCount is int
-          // allow counters to stay same or change by ±1
           && (
             request.resource.data.likes == resource.data.likes
             || request.resource.data.likes == resource.data.likes + 1
@@ -61,22 +60,17 @@ service cloud.firestore {
         )
       );
 
-      // ===============================================
-      // COMMENTS SUBCOLLECTION (v1.5 UPDATED)
-      // ===============================================
+      // COMMENTS SUBCOLLECTION
       match /comments/{commentId} {
         allow read: if true;
 
-        // Create: only authenticated users, userId must match auth.uid, createdAt must be server time
         allow create: if request.auth != null
                       && request.resource.data.userId == request.auth.uid
                       && request.resource.data.displayName is string
                       && request.resource.data.text is string
                       && request.resource.data.createdAt == request.time;
 
-        // Update: FOUR scenarios allowed
         allow update: if (
-          // 1️⃣ Owner editing their comment (text, mentions, editedAt, editCount) - v1.5 NEW
           (request.auth != null
             && resource.data.userId == request.auth.uid
             && request.resource.data.diff(resource.data)
@@ -84,7 +78,6 @@ service cloud.firestore {
                .hasOnly(['text', 'mentions', 'editedAt', 'editCount'])
           )
           ||
-          // 2️⃣ Owner updating displayName (profile name propagation)
           (request.auth != null
             && resource.data.userId == request.auth.uid
             && request.resource.data.displayName is string
@@ -93,69 +86,53 @@ service cloud.firestore {
                .hasOnly(['displayName'])
           )
           ||
-          // 3️⃣ Any authenticated user incrementing reportCount by +1 - v1.5 NEW
           (request.auth != null
             && request.resource.data.diff(resource.data)
                .changedKeys()
                .hasOnly(['reportCount'])
             && request.resource.data.reportCount is int
             && (
-              // Allow increment by 1 if field exists
               (resource.data.keys().hasAll(['reportCount'])
                 && request.resource.data.reportCount == resource.data.reportCount + 1)
-              // OR initialize to 1 if field doesn't exist
               || (!resource.data.keys().hasAll(['reportCount'])
                 && request.resource.data.reportCount == 1)
             )
           )
         );
 
-        // Delete: allow comment owner to delete their own comment
         allow delete: if request.auth != null
                       && resource.data.userId == request.auth.uid;
 
-        // ===============================================
-        // REPORTS SUBCOLLECTION (v1.5 NEW) - ĐÃ ĐIỀU CHỈNH LẠI ALLOW READ
-        // ===============================================
+        // REPORTS SUBCOLLECTION
         match /reports/{reporterId} {
-          // Read: Allow authenticated user to read their OWN report document
-          // Để JavaScript có thể kiểm tra xem người dùng đã báo cáo chưa.
           allow read: if request.auth != null && request.auth.uid == reporterId;
 
-          // Create: Authenticated user can create report with their own ID
-          // (Đã loại bỏ kiểm tra nghiêm ngặt createdAt để phù hợp với việc sử dụng FieldValue.serverTimestamp())
           allow create: if request.auth != null
                         && request.auth.uid == reporterId
                         && request.resource.data.userId == request.auth.uid
                         && request.resource.data.reason is string
                         && request.resource.data.reason in ['spam', 'offensive', 'inappropriate', 'other'];
 
-          // Update/Delete: Reports cannot be modified or deleted
           allow update: if false;
           allow delete: if false;
         }
       }
 
-      // ===============================================
       // LIKES SUBCOLLECTION
-      // ===============================================
       match /likes/{likeId} {
         allow read: if true;
 
-        // Create: auth user may create a like/dislike doc whose id equals their uid
         allow create: if request.auth != null
                       && request.auth.uid == likeId
                       && request.resource.data.userId == request.auth.uid
                       && request.resource.data.type in ['like','dislike']
                       && request.resource.data.createdAt == request.time;
 
-        // Update: owner may flip type
         allow update: if request.auth != null
                       && request.auth.uid == likeId
                       && request.resource.data.userId == request.auth.uid
                       && request.resource.data.type in ['like','dislike'];
 
-        // Delete: owner may delete their like doc
         allow delete: if request.auth != null && request.auth.uid == likeId;
       }
     }
@@ -166,20 +143,16 @@ service cloud.firestore {
     match /users/{userId} {
       allow read: if true;
 
-      // Create: signup only by authenticated user with matching uid and email
       allow create: if request.auth != null
                     && request.auth.uid == userId
                     && request.resource.data.email == request.auth.token.email;
 
-      // Update: owner may update their full profile
-      // OR controlled adjustments to followersCount/followingCount by ±1 (including case where field missing -> set to 1)
       allow update: if (
         request.auth != null && request.auth.uid == userId
       ) || (
         request.auth != null
         && request.resource.data.diff(resource.data).changedKeys().hasOnly(['followersCount','followingCount'])
         && (
-          // followersCount: either unchanged OR ±1 if exists OR set to 1 if missing
           (
             (resource.data.followersCount is int && (
                request.resource.data.followersCount == resource.data.followersCount
@@ -190,7 +163,6 @@ service cloud.firestore {
           )
         )
         && (
-          // followingCount: either unchanged OR ±1 if exists OR set to 1 if missing
           (
             (resource.data.followingCount is int && (
                request.resource.data.followingCount == resource.data.followingCount
@@ -202,12 +174,15 @@ service cloud.firestore {
         )
       );
 
-      // Delete: only owner
       allow delete: if request.auth != null && request.auth.uid == userId;
+      
+      // SEARCH HISTORY SUBCOLLECTION
+      match /searchHistory/{doc} {
+        allow read, write: if request.auth != null 
+                           && request.auth.uid == userId;
+      }
 
-      // ===============================================
       // FOLLOWERS SUBCOLLECTION
-      // ===============================================
       match /followers/{followerId} {
         allow read: if true;
         allow create: if request.auth != null
@@ -218,9 +193,7 @@ service cloud.firestore {
         allow update: if false;
       }
 
-      // ===============================================
       // FOLLOWING SUBCOLLECTION
-      // ===============================================
       match /following/{followingId} {
         allow read: if true;
         allow create: if request.auth != null
@@ -231,20 +204,15 @@ service cloud.firestore {
         allow update: if false;
       }
 
-      // ===============================================
       // VISITORS SUBCOLLECTION
-      // ===============================================
       match /visitors/{visitorId} {
-        // visitors list readable only by profile owner
         allow read: if request.auth != null && request.auth.uid == userId;
 
-        // visitor may create/update their own visitor doc (lastVisitedAt must be server time)
         allow create, update: if request.auth != null
                                && request.auth.uid == visitorId
                                && request.resource.data.userId == request.auth.uid
                                && request.resource.data.lastVisitedAt == request.time;
 
-        // delete only by owner or visitor
         allow delete: if request.auth != null && (request.auth.uid == userId || request.auth.uid == visitorId);
       }
     }
@@ -256,5 +224,14 @@ service cloud.firestore {
       allow read: if true;
       allow write: if true;
     }
-  }
-}
+
+    // ===============================================
+    // NOTIFICATIONS COLLECTION (READ-ONLY)
+    // ===============================================
+    match /notifications/{notificationId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+  } // <-- ĐÓNG match /databases/{database}/documents
+} // <-- ĐÓNG service cloud.firestore
