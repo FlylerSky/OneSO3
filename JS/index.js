@@ -26,7 +26,7 @@ const quill = new Quill('#editor', {
       ['bold', 'italic', 'underline', 'strike'],
       [{ 'color': [] }, { 'background': [] }],
       [{ 'list': 'ordered' }, { 'list': 'bullet' }],
-      ['link'], // Only links, no image/video upload
+      ['link', 'video', 'code-block'], // Only links, no image/video upload
       ['clean']
     ]
   },
@@ -244,13 +244,40 @@ async function renderPost(d) {
       followBtnHtml = `<button class="post-follow-btn ${isFollowing ? 'following' : ''}" onclick="window.toggleFollowFromFeed('${d.userId}', this)"><i class="bi bi-${isFollowing ? 'check-lg' : 'person-plus-fill'}"></i><span>${isFollowing ? 'Đang theo dõi' : 'Theo dõi'}</span></button>`;
     }
     
-    authorHtml = `<div class="post-header"><img src="${authorAvatar}" class="post-author-avatar" alt="avatar" onclick="window.navigateToProfile('${d.userId}')"><div class="post-author-info"><div class="post-author-name" onclick="window.navigateToProfile('${d.userId}')">${esc(d.displayName || prof?.displayName || 'Người dùng')}</div>${tag ? `<div class="post-author-tag" onclick="window.navigateToProfile('${d.userId}')">${esc(tag)}</div>` : ''}</div>${followBtnHtml}</div>`;
+    // ✅ FIX: Tên và tag trong cùng phạm vi avatar (vertical stack)
+    authorHtml = `
+      <div class="post-header">
+        <img src="${authorAvatar}" class="post-author-avatar" alt="avatar" onclick="window.navigateToProfile('${d.userId}')">
+        <div class="post-author-info">
+          <div class="post-author-name" onclick="window.navigateToProfile('${d.userId}')">${esc(d.displayName || prof?.displayName || 'Người dùng')}</div>
+          ${tag ? `<div class="post-author-tag" onclick="window.navigateToProfile('${d.userId}')">${esc(tag)}</div>` : ''}
+        </div>
+        ${followBtnHtml}
+      </div>
+    `;
   } else {
     authorAvatar = `https://ui-avatars.com/api/?name=${encodeURIComponent(d.displayName||'T')}&background=FFC107&color=000&size=128`;
-    authorHtml = `<div class="post-header"><img src="${authorAvatar}" class="post-author-avatar" alt="avatar"><div class="post-author-info"><div class="post-author-name">${esc(d.displayName || 'Tài khoản thử nghiệm')}</div><span class="badge-trial">Tài khoản thử nghiệm</span></div></div>`;
+    authorHtml = `
+      <div class="post-header">
+        <img src="${authorAvatar}" class="post-author-avatar" alt="avatar">
+        <div class="post-author-info">
+          <div class="post-author-name">${esc(d.displayName || 'Tài khoản thử nghiệm')}</div>
+          <span class="badge-trial">Tài khoản thử nghiệm</span>
+        </div>
+      </div>
+    `;
   }
   
   const hashtagsHtml = (d.hashtags || []).map(h => `<a href="tag.html?tag=${encodeURIComponent(h)}" class="hashtag">${esc(h)}</a>`).join(' ');
+  
+  // ✅ FIX: Get accurate comment count using subcollection size
+  let commentCount = 0;
+  try {
+    const commentsSnap = await getDocs(collection(db, 'posts', id, 'comments'));
+    commentCount = commentsSnap.size;
+  } catch(e) {
+    console.warn('Failed to get comment count for post', id, e);
+  }
   
   const card = document.createElement('div');
   card.className = 'card card-post p-3';
@@ -268,7 +295,7 @@ async function renderPost(d) {
     <div class="d-flex gap-2 mt-3">
       <button class="btn btn-sm btn-outline-primary btn-rounded btn-like" data-id="${id}"><i class="bi bi-hand-thumbs-up"></i> <span class="like-count">${d.likes || 0}</span></button>
       <button class="btn btn-sm btn-outline-danger btn-rounded btn-dislike" data-id="${id}"><i class="bi bi-hand-thumbs-down"></i> <span class="dislike-count">${d.dislikes || 0}</span></button>
-      <button class="btn btn-sm btn-outline-secondary btn-rounded btn-comment" data-id="${id}"><i class="bi bi-chat"></i> <span class="comment-count">${d.commentsCount || 0}</span></button>
+      <button class="btn btn-sm btn-outline-secondary btn-rounded btn-comment" data-id="${id}"><i class="bi bi-chat"></i> <span class="comment-count">${commentCount}</span></button>
       <a href="post.html?id=${encodeURIComponent(id)}" class="btn btn-sm btn-outline-success btn-rounded ms-auto"><i class="bi bi-box-arrow-up-right"></i> Xem</a>
     </div>
   `;
