@@ -1,10 +1,6 @@
-// JS/index.js - Relife 4.1 Enhanced
-// ✅ FIX 1: Duplicate comments removed (debounced render)
-// ✅ FIX 2: Real avatar from Firestore in comments
-// ✅ FIX 3: Auto-scroll to new post after creation
-// ✅ FIX 4: Show search history on focus
-// ✅ FIX 5: UID in menu
-// ✅ FIX 6: Enhanced search (hashtags, fuzzy match)
+// JS/index.js - Relife 3.1 Synchronized COMPLETE
+// ✅ All features from POST.js integrated
+// ✅ Infinite scroll, Search with history, Follow, Reply, Edit, Delete, Report, Mentions
 
 import { initFirebase } from '../firebase-config.js';
 import {
@@ -30,7 +26,7 @@ const quill = new Quill('#editor', {
       ['bold', 'italic', 'underline', 'strike'],
       [{ 'color': [] }, { 'background': [] }],
       [{ 'list': 'ordered' }, { 'list': 'bullet' }],
-      ['link', 'video', 'code-block'],
+      ['link'], // Only links, no image/video upload
       ['clean']
     ]
   },
@@ -65,7 +61,6 @@ const newPostUserInfo = document.getElementById('newPostUserInfo');
 const searchInput = document.getElementById('searchInput');
 const searchResults = document.getElementById('searchResults');
 const loadingIndicator = document.getElementById('loadingIndicator');
-const clearSearchInputBtn = document.getElementById('clearSearchInput');
 
 // State
 let currentUserProfile = null;
@@ -83,15 +78,8 @@ let currentReplyTo = null;
 let currentReportCommentId = null;
 let currentEditingCommentId = null;
 
-// ✅ FIX 1: Debounced comment rendering
-let commentRenderTimeout = null;
-const renderedCommentIds = new Set();
-
 // Search history
 const MAX_SEARCH_HISTORY = 5;
-
-// ✅ FIX 2: User avatar cache
-const userAvatarCache = new Map();
 
 function getAvatar(profile, fallback) {
   return profile?.avatarUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(fallback || 'U')}&background=0D6EFD&color=fff&size=128`;
@@ -140,17 +128,12 @@ function renderMenuLoggedOut() {
 function renderMenuLoggedIn(user, profile) {
   const avatar = getAvatar(profile, profile?.displayName || user.email);
   const disp = profile?.displayName || user.displayName || user.email;
-  
-  // ✅ FIX 5: Show UID in menu
   menuAuthArea.innerHTML = `
     <div class="d-flex gap-2 align-items-center p-3 bg-light rounded">
       <img src="${avatar}" class="user-avatar" alt="avatar" style="cursor:pointer;" onclick="window.navigateToProfile('${user.uid}')">
       <div class="flex-fill">
         <div class="fw-bold">${esc(disp)}</div>
         <div class="small-muted">${esc(user.email)}</div>
-        <div class="small text-muted" style="font-size: 0.75rem;">
-          <i class="bi bi-key-fill me-1"></i>UID: <code style="font-size: 0.7rem; background: #e9ecef; padding: 2px 4px; border-radius: 4px;">${user.uid}</code>
-        </div>
       </div>
     </div>
     <div class="mt-3">
@@ -193,6 +176,7 @@ function initFeed() {
   feedUnsub = onSnapshot(q, snapshot => {
     allPosts = snapshot.docs.map(doc => ({ id: doc.id, ref: doc.ref, ...doc.data() }));
     
+    // Update existing posts (counters)
     snapshot.docChanges().forEach(change => {
       if(change.type === 'modified') {
         updatePostInFeed(change.doc.id, change.doc.data());
@@ -260,38 +244,13 @@ async function renderPost(d) {
       followBtnHtml = `<button class="post-follow-btn ${isFollowing ? 'following' : ''}" onclick="window.toggleFollowFromFeed('${d.userId}', this)"><i class="bi bi-${isFollowing ? 'check-lg' : 'person-plus-fill'}"></i><span>${isFollowing ? 'Đang theo dõi' : 'Theo dõi'}</span></button>`;
     }
     
-    authorHtml = `
-      <div class="post-header">
-        <img src="${authorAvatar}" class="post-author-avatar" alt="avatar" onclick="window.navigateToProfile('${d.userId}')">
-        <div class="post-author-info">
-          <div class="post-author-name" onclick="window.navigateToProfile('${d.userId}')">${esc(d.displayName || prof?.displayName || 'Người dùng')}</div>
-          ${tag ? `<div class="post-author-tag" onclick="window.navigateToProfile('${d.userId}')">${esc(tag)}</div>` : ''}
-        </div>
-        ${followBtnHtml}
-      </div>
-    `;
+    authorHtml = `<div class="post-header"><img src="${authorAvatar}" class="post-author-avatar" alt="avatar" onclick="window.navigateToProfile('${d.userId}')"><div class="post-author-info"><div class="post-author-name" onclick="window.navigateToProfile('${d.userId}')">${esc(d.displayName || prof?.displayName || 'Người dùng')}</div>${tag ? `<div class="post-author-tag" onclick="window.navigateToProfile('${d.userId}')">${esc(tag)}</div>` : ''}</div>${followBtnHtml}</div>`;
   } else {
     authorAvatar = `https://ui-avatars.com/api/?name=${encodeURIComponent(d.displayName||'T')}&background=FFC107&color=000&size=128`;
-    authorHtml = `
-      <div class="post-header">
-        <img src="${authorAvatar}" class="post-author-avatar" alt="avatar">
-        <div class="post-author-info">
-          <div class="post-author-name">${esc(d.displayName || 'Tài khoản thử nghiệm')}</div>
-          <span class="badge-trial">Tài khoản thử nghiệm</span>
-        </div>
-      </div>
-    `;
+    authorHtml = `<div class="post-header"><img src="${authorAvatar}" class="post-author-avatar" alt="avatar"><div class="post-author-info"><div class="post-author-name">${esc(d.displayName || 'Tài khoản thử nghiệm')}</div><span class="badge-trial">Tài khoản thử nghiệm</span></div></div>`;
   }
   
-  const hashtagsHtml = (d.hashtags||[]).map(h => `<a href="tag.html?tag=${encodeURIComponent(h)}" class="hashtag">${esc(h)}</a>`).join(' ');
-  
-  let commentCount = 0;
-  try {
-    const commentsSnap = await getDocs(collection(db, 'posts', id, 'comments'));
-    commentCount = commentsSnap.size;
-  } catch(e) {
-    console.warn('Failed to get comment count for post', id, e);
-  }
+  const hashtagsHtml = (d.hashtags || []).map(h => `<a href="tag.html?tag=${encodeURIComponent(h)}" class="hashtag">${esc(h)}</a>`).join(' ');
   
   const card = document.createElement('div');
   card.className = 'card card-post p-3';
@@ -309,7 +268,7 @@ async function renderPost(d) {
     <div class="d-flex gap-2 mt-3">
       <button class="btn btn-sm btn-outline-primary btn-rounded btn-like" data-id="${id}"><i class="bi bi-hand-thumbs-up"></i> <span class="like-count">${d.likes || 0}</span></button>
       <button class="btn btn-sm btn-outline-danger btn-rounded btn-dislike" data-id="${id}"><i class="bi bi-hand-thumbs-down"></i> <span class="dislike-count">${d.dislikes || 0}</span></button>
-      <button class="btn btn-sm btn-outline-secondary btn-rounded btn-comment" data-id="${id}"><i class="bi bi-chat"></i> <span class="comment-count">${commentCount}</span></button>
+      <button class="btn btn-sm btn-outline-secondary btn-rounded btn-comment" data-id="${id}"><i class="bi bi-chat"></i> <span class="comment-count">${d.commentsCount || 0}</span></button>
       <a href="post.html?id=${encodeURIComponent(id)}" class="btn btn-sm btn-outline-success btn-rounded ms-auto"><i class="bi bi-box-arrow-up-right"></i> Xem</a>
     </div>
   `;
@@ -416,17 +375,17 @@ async function toggleReaction(postId, reaction, cardEl) {
   
   if(!likeSnap.exists()) {
     batch.set(likeDocRef, { userId: currentUser.uid, type: reaction, createdAt: serverTimestamp() });
-    if(reaction === 'like') batch.update(postRef, { likes: increment(1) }); 
+    if(reaction === 'like') batch.update(postRef, { likes: increment(1) });
     else batch.update(postRef, { dislikes: increment(1) });
   } else {
     const prev = likeSnap.data().type;
     if(prev === reaction) {
       batch.delete(likeDocRef);
-      if(reaction === 'like') batch.update(postRef, { likes: increment(-1) }); 
+      if(reaction === 'like') batch.update(postRef, { likes: increment(-1) });
       else batch.update(postRef, { dislikes: increment(-1) });
     } else {
       batch.update(likeDocRef, { type: reaction, updatedAt: serverTimestamp() });
-      if(reaction === 'like') batch.update(postRef, { likes: increment(1), dislikes: increment(-1) }); 
+      if(reaction === 'like') batch.update(postRef, { likes: increment(1), dislikes: increment(-1) });
       else batch.update(postRef, { dislikes: increment(1), likes: increment(-1) });
     }
   }
@@ -452,8 +411,6 @@ async function toggleReaction(postId, reaction, cardEl) {
 // ═══════════════════════════════════════════════════════════
 async function openCommentsModal(postId, title) {
   currentCommentsPostId = postId;
-  renderedCommentIds.clear(); // ✅ Clear on open
-  
   document.getElementById('commentsModalTitle').innerHTML = `<i class="bi bi-chat-dots-fill me-2"></i>Bình luận — ${esc(title || '')}`;
   
   if(!currentUser) {
@@ -476,33 +433,7 @@ async function openCommentsModal(postId, title) {
 function subscribeToComments(postId) {
   if(commentsUnsub) commentsUnsub();
   const q = query(collection(db, 'posts', postId, 'comments'), orderBy('createdAt', 'desc'));
-  
-  // ✅ FIX 1: Debounced render to prevent duplicates
-  commentsUnsub = onSnapshot(q, snap => {
-    clearTimeout(commentRenderTimeout);
-    commentRenderTimeout = setTimeout(() => {
-      renderComments(snap, postId);
-    }, 300);
-  });
-}
-
-// ✅ FIX 2: Fetch real avatars from Firestore
-async function getUserAvatar(userId) {
-  if(userAvatarCache.has(userId)) return userAvatarCache.get(userId);
-  
-  try {
-    const userDoc = await getDoc(doc(db, 'users', userId));
-    if(userDoc.exists()) {
-      const data = userDoc.data();
-      const avatar = getAvatar(data, data.displayName || 'User');
-      userAvatarCache.set(userId, avatar);
-      return avatar;
-    }
-  } catch(e) {
-    console.warn('Failed to fetch avatar for', userId, e);
-  }
-  
-  return `https://ui-avatars.com/api/?name=U&background=0D6EFD&color=fff&size=80`;
+  commentsUnsub = onSnapshot(q, snap => renderComments(snap, postId));
 }
 
 async function renderComments(snapshot, postId) {
@@ -521,11 +452,7 @@ async function renderComments(snapshot, postId) {
   const replyMap = new Map();
   const topLevelComments = [];
   
-  // ✅ FIX 1: Track rendered IDs
-  const currentBatchIds = new Set();
-  
   comments.forEach(c => {
-    currentBatchIds.add(c.id);
     if(c.replyTo) {
       if(!replyMap.has(c.replyTo)) replyMap.set(c.replyTo, []);
       replyMap.get(c.replyTo).push(c);
@@ -534,25 +461,14 @@ async function renderComments(snapshot, postId) {
     }
   });
   
-  // ✅ Only render new comments
-  if(currentBatchIds.size === renderedCommentIds.size && 
-     [...currentBatchIds].every(id => renderedCommentIds.has(id))) {
-    return; // No changes
-  }
-  
-  renderedCommentIds.clear();
-  currentBatchIds.forEach(id => renderedCommentIds.add(id));
-  
-  for(const comment of topLevelComments) {
-    await renderCommentWithReplies(list, comment, 0, replyMap, postAuthorId);
-  }
+  topLevelComments.forEach(c => renderCommentWithReplies(list, c, 0, replyMap, postAuthorId));
 }
 
-async function renderCommentWithReplies(container, comment, depth, replyMap, postAuthorId) {
+function renderCommentWithReplies(container, comment, depth, replyMap, postAuthorId) {
   const replies = replyMap.get(comment.id) || [];
   const hasReplies = replies.length > 0;
   
-  const commentEl = await renderCommentElement(comment, depth, hasReplies, replies.length, postAuthorId);
+  const commentEl = renderCommentElement(comment, depth, hasReplies, replies.length, postAuthorId);
   container.appendChild(commentEl);
   
   if(hasReplies) {
@@ -560,17 +476,13 @@ async function renderCommentWithReplies(container, comment, depth, replyMap, pos
     repliesContainer.className = 'relife-replies-container';
     repliesContainer.id = `replies-${comment.id}`;
     repliesContainer.style.display = 'none';
-    for(const reply of replies) {
-      await renderCommentWithReplies(repliesContainer, reply, depth + 1, replyMap, postAuthorId);
-    }
+    replies.forEach(reply => renderCommentWithReplies(repliesContainer, reply, depth + 1, replyMap, postAuthorId));
     container.appendChild(repliesContainer);
   }
 }
 
-async function renderCommentElement(comment, depth, hasReplies, replyCount, postAuthorId) {
-  // ✅ FIX 2: Get real avatar
-  const avatar = await getUserAvatar(comment.userId);
-  
+function renderCommentElement(comment, depth, hasReplies, replyCount, postAuthorId) {
+  const avatar = getAvatar(null, comment.displayName);
   const isOwnComment = currentUser && comment.userId === currentUser.uid;
   const isAuthor = comment.userId === postAuthorId;
   const reportCount = comment.reportCount || 0;
@@ -1025,120 +937,30 @@ document.getElementById('postCommentBtn').onclick = async () => {
 };
 
 // ═══════════════════════════════════════════════════════════
-// ✅ FIX 4 & 6: ENHANCED SEARCH WITH HISTORY ON FOCUS
+// SEARCH WITH HISTORY
 // ═══════════════════════════════════════════════════════════
-
-// ✅ Show search on focus
-searchInput.addEventListener('focus', async () => {
-  const kw = searchInput.value.trim();
-  if(!kw) {
-    await showSearchHistory();
-  } else {
-    handleSearchInput();
-  }
-});
-
-// ✅ Clear button
-clearSearchInputBtn.addEventListener('click', () => {
-  searchInput.value = '';
-  clearSearchInputBtn.style.display = 'none';
-  searchResults.style.display = 'none';
-  searchInput.focus();
-});
-
-searchInput.addEventListener('input', () => {
-  const val = searchInput.value.trim();
-  clearSearchInputBtn.style.display = val ? 'block' : 'none';
-});
-
 let searchTimer = 0;
 searchInput.addEventListener('input', () => { 
   clearTimeout(searchTimer); 
   searchTimer = setTimeout(handleSearchInput, 220); 
 });
 
-async function showSearchHistory() {
-  const history = await loadSearchHistory();
-  
-  if(history.length === 0) {
-    searchResults.innerHTML = `
-      <div class="search-empty-state">
-        <i class="bi bi-clock-history"></i>
-        <div>Chưa có lịch sử tìm kiếm</div>
-      </div>
-    `;
-  } else {
-    let html = `
-      <div class="search-category-header">
-        <span>LỊCH SỬ TÌM KIẾM</span>
-        <button class="btn-clear-history" onclick="window.clearAllSearchHistory()">
-          <i class="bi bi-trash me-1"></i>Xóa tất cả
-        </button>
-      </div>
-    `;
-    
-    history.forEach(item => {
-      html += `<div class="search-history-item" data-term="${esc(item.term)}"><i class="bi bi-clock-history search-history-icon"></i><span class="search-history-text">${esc(item.term)}</span><button class="search-history-remove" onclick="window.removeSearchHistory('${esc(item.term)}', event)"><i class="bi bi-x-lg"></i></button></div>`;
-    });
-    
-    searchResults.innerHTML = html;
-    
-    searchResults.querySelectorAll('.search-history-item').forEach(item => {
-      item.onclick = async (e) => {
-        if(e.target.closest('.search-history-remove') || e.target.closest('.btn-clear-history')) return;
-        const term = item.dataset.term;
-        searchInput.value = term;
-        clearSearchInputBtn.style.display = 'block';
-        await saveSearchHistory(term);
-        handleSearchInput();
-      };
-    });
-  }
-  
-  searchResults.style.display = 'block';
-}
-
-window.clearAllSearchHistory = async function() {
-  if(!currentUser) return;
-  if(!confirm('Xóa toàn bộ lịch sử tìm kiếm?')) return;
-  
-  try {
-    const historyRef = doc(db, 'users', currentUser.uid, 'searchHistory', 'history');
-    await setDoc(historyRef, { items: [] });
-    showSearchHistory();
-  } catch(e) {
-    console.error('Clear all history error:', e);
-  }
-};
-
-// ✅ FIX 6: Enhanced search with hashtags + fuzzy matching
 async function handleSearchInput() {
   const kw = searchInput.value.trim().toLowerCase();
   if(!kw) { 
-    await showSearchHistory();
+    searchResults.style.display = 'none'; 
     return; 
   }
   
-  clearSearchInputBtn.style.display = 'block';
-  
   await ensureCaches();
   
+  // Search history
   let html = '';
-  
-  // ✅ Search hashtags
-  const hashtagMatches = new Set();
-  allPosts.forEach(p => {
-    (p.hashtags || []).forEach(h => {
-      if(h.toLowerCase().includes(kw)) {
-        hashtagMatches.add(h);
-      }
-    });
-  });
-  
-  if(hashtagMatches.size > 0) {
-    html += '<div class="search-category-header">HASHTAGS</div>';
-    [...hashtagMatches].slice(0, 5).forEach(tag => {
-      html += `<div class="search-result-item" onclick="window.location.href='tag.html?tag=${encodeURIComponent(tag)}'"><i class="bi bi-hash text-primary me-2"></i><span class="fw-bold">${esc(tag)}</span></div>`;
+  const history = await loadSearchHistory();
+  if(history.length > 0) {
+    html += '<div class="search-category-header">LỊCH SỬ TÌM KIẾM</div>';
+    history.forEach(item => {
+      html += `<div class="search-history-item" data-term="${esc(item.term)}"><i class="bi bi-clock-history search-history-icon"></i><span class="search-history-text">${esc(item.term)}</span><button class="search-history-remove" onclick="window.removeSearchHistory('${esc(item.term)}', event)"><i class="bi bi-x-lg"></i></button></div>`;
     });
     html += '<div class="search-category-divider"></div>';
   }
@@ -1166,7 +988,7 @@ async function handleSearchInput() {
     html += '<div class="search-category-divider"></div>';
   }
   
-  // Search posts (title, content, author, hashtags)
+  // Search posts
   const posts = allPosts.filter(p => {
     const titleMatch = (p.title || '').toLowerCase().includes(kw);
     const contentMatch = (p.content || '').toLowerCase().includes(kw);
@@ -1182,10 +1004,21 @@ async function handleSearchInput() {
     });
   }
   
-  if(!html) html = `<div class="search-empty-state"><i class="bi bi-search"></i><div>Không tìm thấy kết quả cho "${esc(kw)}"</div></div>`;
+  if(!html) html = `<div class="text-center text-muted py-3">Không tìm thấy</div>`;
   
   searchResults.innerHTML = html;
   searchResults.style.display = 'block';
+  
+  // Bind events
+  searchResults.querySelectorAll('.search-history-item').forEach(item => {
+    item.onclick = async (e) => {
+      if(e.target.closest('.search-history-remove')) return;
+      const term = item.dataset.term;
+      searchInput.value = term;
+      await saveSearchHistory(term);
+      handleSearchInput();
+    };
+  });
   
   searchResults.querySelectorAll('.search-user-item').forEach(item => {
     item.onclick = async (e) => {
@@ -1250,7 +1083,7 @@ window.removeSearchHistory = async function(term, event) {
     history = history.filter(item => item.term !== term);
     const historyRef = doc(db, 'users', currentUser.uid, 'searchHistory', 'history');
     await setDoc(historyRef, { items: history }, { merge: true });
-    showSearchHistory();
+    handleSearchInput();
   } catch(e) {
     console.error('Remove history error:', e);
   }
@@ -1262,13 +1095,13 @@ window.toggleFollowFromSearch = async function(targetUserId, btnElement, event) 
 };
 
 document.addEventListener('click', e => { 
-  if(!searchInput.contains(e.target) && !searchResults.contains(e.target) && !clearSearchInputBtn.contains(e.target)) {
+  if(!searchInput.contains(e.target) && !searchResults.contains(e.target)) {
     searchResults.style.display = 'none'; 
   }
 });
 
 // ═══════════════════════════════════════════════════════════
-// ✅ FIX 3: AUTO-SCROLL TO NEW POST
+// NEW POST
 // ═══════════════════════════════════════════════════════════
 document.getElementById('newPostForm').addEventListener('submit', async ev => {
   ev.preventDefault();
@@ -1278,48 +1111,27 @@ document.getElementById('newPostForm').addEventListener('submit', async ev => {
   const contentHTML = quill.root.innerHTML;
   
   if (currentUser && currentUserProfile) {
-    try {
-      const newPostRef = await addDoc(collection(db, 'posts'), { 
-        displayName: currentUserProfile.displayName || currentUser.email, 
-        title, 
-        content: contentHTML, 
-        hashtags, 
-        likes: 0, 
-        dislikes: 0, 
-        commentsCount: 0, 
-        createdAt: serverTimestamp(), 
-        userId: currentUser.uid, 
-        authorTag: currentUserProfile.tagName || null 
-      });
-      
-      // ✅ FIX 3: Clear form and close modal
-      document.getElementById('postTitle').value = '';
-      document.getElementById('postHashtags').value = '';
-      quill.root.innerHTML = '';
-      bootstrap.Modal.getOrCreateInstance(document.getElementById('newPostModal')).hide();
-      
-      // ✅ FIX 3: Wait for snapshot to add post, then scroll to top
-      setTimeout(() => {
-        window.scrollTo({ top: 0, behavior: 'smooth' });
-        
-        // Highlight new post
-        const newPostCard = document.querySelector(`[data-post-id="${newPostRef.id}"]`);
-        if(newPostCard) {
-          newPostCard.style.animation = 'highlightPulse 2s ease';
-          setTimeout(() => {
-            newPostCard.style.animation = '';
-          }, 2000);
-        }
-      }, 1000);
-      
-    } catch(err) {
-      console.error('Post creation error:', err);
-      alert('Không thể đăng bài. Vui lòng thử lại.');
-    }
+    await addDoc(collection(db, 'posts'), { 
+      displayName: currentUserProfile.displayName || currentUser.email, 
+      title, 
+      content: contentHTML, 
+      hashtags, 
+      likes: 0, 
+      dislikes: 0, 
+      commentsCount: 0, 
+      createdAt: serverTimestamp(), 
+      userId: currentUser.uid, 
+      authorTag: currentUserProfile.tagName || null 
+    });
   } else {
     alert('Bạn cần đăng nhập để đăng bài.');
     return;
   }
+  
+  document.getElementById('postTitle').value = '';
+  document.getElementById('postHashtags').value = '';
+  quill.root.innerHTML = '';
+  bootstrap.Modal.getOrCreateInstance(document.getElementById('newPostModal')).hide();
 });
 
 // ═══════════════════════════════════════════════════════════

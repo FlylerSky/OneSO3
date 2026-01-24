@@ -20,9 +20,6 @@
       <div class="search-row">
         <i class="bi bi-search small-muted ms-2"></i>
         <input id="searchInput" class="form-control form-control-sm border-0" placeholder="Tìm: bài, người, hashtag..." aria-label="search">
-        <button id="clearSearchInput" class="btn-clear-search" style="display:none;">
-          <i class="bi bi-x-circle-fill"></i>
-        </button>
       </div>
       <div id="searchResults" class="search-results"></div>
     </div>
@@ -33,6 +30,7 @@
   </div>
 </nav>
 
+<!-- Offcanvas Menu -->
 <!-- Offcanvas Menu -->
 <div class="offcanvas offcanvas-end" tabindex="-1" id="menuCanvas">
   <div class="offcanvas-header">
@@ -64,9 +62,10 @@
         <span style="font-size: 0.875rem; font-weight: 600;">Notifications</span>
       </a>
       
-
-
-
+      <a href="./other/beta/index.html" class="menu-grid-item" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; padding: 16px 12px; background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 12px; text-decoration: none; color: #1d1d1f; min-height: 100px; text-align: center;">
+        <i class="bi bi-pc-display" style="font-size: 1.75rem;"></i>
+        <span style="font-size: 0.875rem; font-weight: 600; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;">Relife 4.1 Beta</span>
+      </a>
 
       <button id="btnOpenNewPost" class="menu-grid-item btn-primary" data-bs-toggle="modal" data-bs-target="#newPostModal" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; padding: 16px 12px; background: linear-gradient(135deg, #0d6efd, #5856D6); color: white; border: none; border-radius: 12px; min-height: 100px; text-align: center; cursor: pointer;">
         <i class="bi bi-plus-lg" style="font-size: 1.75rem; color: white;"></i>
@@ -82,10 +81,10 @@
         <i class="bi bi-info-circle me-1"></i>Phiên bản
       </small>
       <div class="mb-1">
-        <span class="badge-trial">Relife 4.2</span>
+        <span class="badge-trial">Relife 4.1</span>
       </div>
       <div>
-        <span class="badge bg-secondary">relife_4.2.0.210126</span>
+        <span class="badge bg-secondary">relife_0.4.1.200126</span>
       </div>
     </div>
   </div>
@@ -145,7 +144,7 @@
   </div>
 </div>
 
-<!-- Comments Modal -->
+<!-- Comments Modal (Synchronized from POST) -->
 <div class="modal fade" id="commentsModal" tabindex="-1">
   <div class="modal-dialog modal-dialog-scrollable modal-lg">
     <div class="modal-content">

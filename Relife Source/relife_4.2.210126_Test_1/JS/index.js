@@ -1397,3 +1397,12 @@ document.getElementById('loginForm').addEventListener('submit', async ev => {
 // INIT
 // ═══════════════════════════════════════════════════════════
 initFeed();
+
+console.log('🚀 Relife 4.1 Enhanced loaded');
+console.log('✅ All fixes applied:');
+console.log('  1. Duplicate comments fixed (debounced render)');
+console.log('  2. Real avatars from Firestore in comments');
+console.log('  3. Auto-scroll to new post after creation');
+console.log('  4. Search history shows on focus');
+console.log('  5. UID displayed in menu');
+console.log('  6. Enhanced search (hashtags + fuzzy match)');
