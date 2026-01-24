@@ -100,18 +100,8 @@ service cloud.firestore {
           )
         );
 
-        // ✅ FIX: Allow delete if:
-        // 1. User owns the comment (original behavior)
-        // 2. User owns the parent comment that this comment replies to
-        allow delete: if request.auth != null && (
-          // Case 1: Delete own comment
-          resource.data.userId == request.auth.uid
-          ||
-          // Case 2: Delete reply if user owns parent comment
-          (resource.data.keys().hasAll(['replyTo']) 
-            && exists(/databases/$(database)/documents/posts/$(postId)/comments/$(resource.data.replyTo))
-            && get(/databases/$(database)/documents/posts/$(postId)/comments/$(resource.data.replyTo)).data.userId == request.auth.uid)
-        );
+        allow delete: if request.auth != null
+                      && resource.data.userId == request.auth.uid;
 
         // REPORTS SUBCOLLECTION
         match /reports/{reporterId} {
@@ -243,5 +233,5 @@ service cloud.firestore {
       allow write: if false;
     }
 
-  }
-}
+  } // <-- ĐÓNG match /databases/{database}/documents
+} // <-- ĐÓNG service cloud.firestore
