@@ -12,7 +12,6 @@ const db = initFirebase();
 const auth = getAuth();
 const params = new URLSearchParams(location.search);
 const postId = params.get('id');
-const notificationId = params.get('notification');
 const postArea = document.getElementById('postArea');
 const commentsSection = document.getElementById('commentsSection');
 const hiddenRenderer = document.getElementById('__qs_hidden_renderer');
@@ -532,10 +531,6 @@ async function toggleFollow(targetUserId) {
  * Load and render post
  */
 async function load() {
- if(notificationId) {
-    await loadNotification(notificationId);
-    return;
-  }
   if(!postId) {
     postArea.innerHTML = `
       <div class="relife-glass-card">
@@ -1491,108 +1486,6 @@ async function resolveMentions(mentions) {
   }
   
   return userIds;
-}
-
-/*Notification*/
-async function loadNotification(notifId) {
-  try {
-    const snap = await getDoc(doc(db, 'notifications', notifId));
-    if(!snap.exists()) {
-      postArea.innerHTML = `
-        <div class="relife-glass-card">
-          <div class="text-center text-muted py-5">
-            <i class="bi bi-exclamation-circle" style="font-size: 3rem; margin-bottom: 1rem;"></i>
-            <div>Không tìm thấy thông báo</div>
-            <a href="notification.html" class="relife-btn-primary mt-3">Về trang thông báo</a>
-          </div>
-        </div>
-      `;
-      return;
-    }
-    
-    const d = snap.data();
-    
-    // Category labels
-    const categoryLabels = {
-      'update': 'Cập nhật',
-      'maintenance': 'Bảo trì', 
-      'feature': 'Tính năng mới',
-      'news': 'Tin tức'
-    };
-    
-    const categoryIcons = {
-      'update': 'bi-arrow-up-circle-fill',
-      'maintenance': 'bi-tools',
-      'feature': 'bi-stars',
-      'news': 'bi-newspaper'
-    };
-    
-    const categoryBadge = `<span class="relife-trial-badge">
-      <i class="bi ${categoryIcons[d.category] || 'bi-bell-fill'}"></i>
-      ${categoryLabels[d.category] || 'Thông báo'}
-    </span>`;
-    
-    const priorityBadge = d.priority === 'high' 
-      ? '<span style="background: rgba(255, 59, 48, 0.15); color: var(--liquid-danger); padding: 4px 12px; border-radius: 999px; font-size: 0.75rem; font-weight: 700;">Quan trọng</span>'
-      : '';
-    
-    // Render content using existing renderContent function
-    const rendered = await renderContent(d.content);
-    
-    postArea.innerHTML = `
-      <div class="relife-glass-card">
-        <div class="relife-post-header">
-          <div style="width: 56px; height: 56px; border-radius: 50%; background: linear-gradient(135deg, var(--liquid-primary), var(--liquid-secondary)); display: flex; align-items: center; justify-content: center;">
-            <i class="bi bi-megaphone-fill" style="font-size: 1.5rem; color: white;"></i>
-          </div>
-          <div class="relife-author-info">
-            <div class="relife-author-name">
-              Relife Official
-              <span class="relife-author-badge"><i class="bi bi-patch-check-fill"></i> Admin</span>
-            </div>
-            <div class="relife-author-meta">
-              ${categoryBadge}
-              ${priorityBadge}
-              <div class="relife-post-time">
-                <i class="bi bi-clock"></i>
-                <span>${fmtDate(d.createdAt)}</span>
-              </div>
-            </div>
-          </div>
-        </div>
-        <h1 class="relife-post-title">${esc(d.title || 'Thông báo')}</h1>
-        <div id="postContentContainer" class="post-content">${rendered}</div>
-        
-        <div style="margin-top: 2rem; padding-top: 1.5rem; border-top: 1px solid rgba(142, 142, 147, 0.15); text-align: center;">
-          <a href="notification.html" class="relife-btn-primary">
-            <i class="bi bi-arrow-left me-2"></i>Quay lại danh sách thông báo
-          </a>
-        </div>
-      </div>
-    `;
-    
-    // Attach image viewer
-    attachImageViewerToContent();
-    
-    // Hide comments section for notifications
-    commentsSection.style.display = 'none';
-    
-    // Smooth scroll animation
-    postArea.querySelector('.relife-glass-card').style.animation = 'fadeInUp 0.5s ease';
-    
-  } catch(err) {
-    console.error('Load notification error:', err);
-    postArea.innerHTML = `
-      <div class="relife-glass-card">
-        <div class="text-center text-danger py-5">
-          <i class="bi bi-exclamation-triangle" style="font-size: 3rem; margin-bottom: 1rem;"></i>
-          <div>Lỗi khi tải thông báo</div>
-          <small class="text-muted d-block mt-2">${esc(err.message || err)}</small>
-          <a href="notification.html" class="relife-btn-primary mt-3">Về trang thông báo</a>
-        </div>
-      </div>
-    `;
-  }
 }
 
 /**

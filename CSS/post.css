@@ -1,7 +1,7 @@
 /* ============================================
-   RELIFE UI 1.1 - POST PAGE
-   Liquid Glass Design for Content Display
-   NEW: Follow Button, Reply System, Author Badge
+   RELIFE UI 1.1 - POST PAGE (HIGHLY OPTIMIZED)
+   Liquid Glass Design - Performance First
+   Optimized: Removed ALL blur effects and GPU-heavy animations
    ============================================ */
 
 @font-face {
@@ -15,10 +15,10 @@
    ROOT VARIABLES
    ============================================ */
 :root {
-  /* Glass Effect */
-  --glass-bg: rgba(255, 255, 255, 0.72);
-  --glass-border: rgba(255, 255, 255, 0.18);
-  --glass-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.15);
+  /* Glass Effect - MINIMAL */
+  --glass-bg: rgba(255, 255, 255, 0.9);
+  --glass-border: rgba(142, 142, 147, 0.15);
+  --glass-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
   
   /* Colors */
   --liquid-primary: #007AFF;
@@ -27,10 +27,6 @@
   --liquid-success: #34C759;
   --liquid-warning: #FF9500;
   --liquid-danger: #FF3B30;
-  
-  /* Blur */
-  --blur-amount: 24px;
-  --blur-light: 12px;
   
   /* Text */
   --text-primary: #1d1d1f;
@@ -56,7 +52,7 @@
 
 body {
   font-family: "One OS UI 1", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-  background: #f5f5f7;
+  background: linear-gradient(135deg, #f5f5f7 0%, #e8e8ea 100%);
   color: var(--text-primary);
   overflow-x: hidden;
   position: relative;
@@ -65,84 +61,15 @@ body {
 }
 
 /* ============================================
-   ANIMATED BACKGROUND
+   SIMPLIFIED BACKGROUND
    ============================================ */
-.relife-bg {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  z-index: -1;
-  overflow: hidden;
-}
-
-.relife-gradient {
-  position: absolute;
-  top: -50%;
-  left: -50%;
-  width: 200%;
-  height: 200%;
-  background: linear-gradient(
-    135deg,
-    rgba(0, 122, 255, 0.1) 0%,
-    rgba(88, 86, 214, 0.08) 25%,
-    rgba(255, 45, 85, 0.06) 50%,
-    rgba(52, 199, 89, 0.08) 75%,
-    rgba(0, 122, 255, 0.1) 100%
-  );
-  animation: gradientRotate 20s ease infinite;
-}
-
-@keyframes gradientRotate {
-  0%, 100% { transform: rotate(0deg); }
-  50% { transform: rotate(180deg); }
-}
-
-.relife-orb {
-  position: absolute;
-  border-radius: 50%;
-  filter: blur(80px);
-  opacity: 0.5;
-  animation: orbFloat 15s ease-in-out infinite;
-}
-
-.relife-orb-1 {
-  width: 400px;
-  height: 400px;
-  background: radial-gradient(circle, rgba(0, 122, 255, 0.4) 0%, transparent 70%);
-  top: 10%;
-  left: 20%;
-}
-
-.relife-orb-2 {
-  width: 350px;
-  height: 350px;
-  background: radial-gradient(circle, rgba(88, 86, 214, 0.35) 0%, transparent 70%);
-  top: 60%;
-  right: 15%;
-  animation-delay: 5s;
-}
-
+.relife-bg,
+.relife-gradient,
+.relife-orb,
+.relife-orb-1,
+.relife-orb-2,
 .relife-orb-3 {
-  width: 300px;
-  height: 300px;
-  background: radial-gradient(circle, rgba(255, 45, 85, 0.3) 0%, transparent 70%);
-  bottom: 15%;
-  left: 40%;
-  animation-delay: 10s;
-}
-
-@keyframes orbFloat {
-  0%, 100% {
-    transform: translate(0, 0) scale(1);
-  }
-  33% {
-    transform: translate(50px, -50px) scale(1.1);
-  }
-  66% {
-    transform: translate(-30px, 30px) scale(0.9);
-  }
+  display: none; /* Completely disabled for performance */
 }
 
 /* ============================================
@@ -165,8 +92,6 @@ body {
   align-items: center;
   padding: var(--spacing-md) var(--spacing-lg);
   background: var(--glass-bg);
-  backdrop-filter: blur(var(--blur-amount)) saturate(180%);
-  -webkit-backdrop-filter: blur(var(--blur-amount)) saturate(180%);
   border: 1px solid var(--glass-border);
   border-radius: 20px;
   margin-bottom: var(--spacing-lg);
@@ -183,7 +108,7 @@ body {
   border-radius: 12px;
   color: var(--liquid-primary);
   text-decoration: none;
-  transition: all 0.3s ease;
+  transition: background 0.2s ease, transform 0.2s ease;
   font-size: 1.2rem;
   border: none;
   cursor: pointer;
@@ -192,7 +117,6 @@ body {
 .relife-back-btn:hover {
   background: rgba(0, 122, 255, 0.2);
   transform: translateX(-3px);
-  color: var(--liquid-primary);
 }
 
 .relife-page-title {
@@ -233,7 +157,7 @@ body {
   color: var(--liquid-primary);
   font-size: 1.1rem;
   cursor: pointer;
-  transition: all 0.3s ease;
+  transition: background 0.2s ease, transform 0.2s ease;
 }
 
 .relife-icon-btn:hover {
@@ -246,16 +170,13 @@ body {
    ============================================ */
 .relife-glass-card {
   background: var(--glass-bg);
-  backdrop-filter: blur(var(--blur-amount)) saturate(180%);
-  -webkit-backdrop-filter: blur(var(--blur-amount)) saturate(180%);
   border: 1px solid var(--glass-border);
   border-radius: 24px;
   padding: var(--spacing-xl);
   box-shadow: var(--glass-shadow);
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   position: relative;
   overflow: hidden;
-  animation: fadeInUp 0.5s ease;
+  animation: fadeInUp 0.3s ease;
 }
 
 @keyframes fadeInUp {
@@ -278,10 +199,9 @@ body {
   height: 1px;
   background: linear-gradient(90deg, 
     transparent 0%, 
-    rgba(255, 255, 255, 0.8) 50%, 
+    rgba(142, 142, 147, 0.3) 50%, 
     transparent 100%
   );
-  opacity: 0.5;
 }
 
 /* ============================================
@@ -307,14 +227,13 @@ body {
   border-radius: 50%;
   object-fit: cover;
   border: 3px solid rgba(0, 122, 255, 0.2);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
   cursor: pointer;
-  transition: all 0.3s ease;
+  transition: transform 0.2s ease;
 }
 
 .relife-author-avatar:hover {
   transform: scale(1.05);
-  border-color: rgba(0, 122, 255, 0.4);
 }
 
 .relife-author-info {
@@ -337,7 +256,6 @@ body {
   color: var(--liquid-primary);
 }
 
-/* NEW: Author Badge */
 .relife-author-badge {
   display: inline-flex;
   align-items: center;
@@ -365,7 +283,7 @@ body {
   font-size: 0.9375rem;
   font-weight: 600;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: color 0.2s ease;
 }
 
 .relife-author-tag:hover {
@@ -392,7 +310,6 @@ body {
   letter-spacing: 0.5px;
 }
 
-/* NEW: Follow Button */
 .relife-follow-btn {
   display: inline-flex;
   align-items: center;
@@ -405,13 +322,13 @@ body {
   font-weight: 700;
   font-size: 0.9rem;
   cursor: pointer;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  box-shadow: 0 4px 12px rgba(0, 122, 255, 0.3);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  box-shadow: 0 2px 8px rgba(0, 122, 255, 0.3);
 }
 
 .relife-follow-btn:hover {
   transform: translateY(-2px);
-  box-shadow: 0 6px 20px rgba(0, 122, 255, 0.4);
+  box-shadow: 0 4px 12px rgba(0, 122, 255, 0.4);
 }
 
 .relife-follow-btn.following {
@@ -428,7 +345,6 @@ body {
 .relife-follow-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
-  transform: none;
 }
 
 /* Post Title */
@@ -450,7 +366,6 @@ body {
   overflow-wrap: break-word;
 }
 
-/* Content Typography */
 .post-content p {
   margin-bottom: 1.25rem;
 }
@@ -545,7 +460,7 @@ body {
   border-radius: 12px;
   overflow-x: auto;
   margin: 1.5rem 0;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
 .post-content pre code {
@@ -562,26 +477,25 @@ body {
   display: block;
   margin: 1.5rem auto;
   border-radius: 16px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
   cursor: zoom-in;
-  transition: transform 0.3s ease, box-shadow 0.3s ease;
+  transition: transform 0.2s ease;
 }
 
 .post-content img:hover {
-  transform: scale(1.02);
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.15);
+  transform: scale(1.01);
 }
 
 /* iFrame Wrapper */
 .post-content .iframe-wrapper {
   position: relative;
   width: 100%;
-  padding-bottom: 56.25%; /* 16:9 */
+  padding-bottom: 56.25%;
   height: 0;
   overflow: hidden;
   border-radius: 16px;
   margin: 1.5rem 0;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
 .post-content .iframe-wrapper iframe {
@@ -599,7 +513,7 @@ body {
   overflow-x: auto;
   margin: 1.5rem 0;
   border-radius: 12px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.05);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
 }
 
 .post-content table {
@@ -640,15 +554,14 @@ body {
   border-radius: 999px;
   font-size: 0.875rem;
   font-weight: 600;
-  transition: all 0.3s ease;
+  transition: background 0.2s ease, transform 0.2s ease;
   border: 1px solid transparent;
 }
 
 .relife-hashtag:hover {
   background: rgba(0, 122, 255, 0.15);
   border-color: rgba(0, 122, 255, 0.3);
-  transform: translateY(-2px);
-  color: var(--liquid-primary);
+  transform: translateY(-1px);
 }
 
 /* Reaction Buttons */
@@ -666,22 +579,20 @@ body {
   align-items: center;
   gap: 8px;
   padding: 10px 20px;
-  background: rgba(255, 255, 255, 0.6);
-  backdrop-filter: blur(var(--blur-light));
-  -webkit-backdrop-filter: blur(var(--blur-light));
+  background: rgba(200, 255, 200, 0.8);
   border: 2px solid transparent;
   border-radius: 999px;
   font-size: 0.9375rem;
   font-weight: 600;
   cursor: pointer;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: background 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
   color: var(--text-secondary);
 }
 
 .relife-reaction-btn:hover {
-  background: rgba(255, 255, 255, 0.9);
-  transform: translateY(-2px);
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+  background: white;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
 .relife-reaction-btn.active-like {
@@ -736,7 +647,6 @@ body {
   font-weight: 700;
 }
 
-/* Notice */
 .relife-notice {
   display: flex;
   align-items: center;
@@ -768,12 +678,12 @@ body {
   font-weight: 600;
   font-size: 0.875rem;
   cursor: pointer;
-  transition: all 0.3s ease;
+  transition: background 0.2s ease, transform 0.2s ease;
 }
 
 .relife-btn-sm:hover {
   background: var(--liquid-secondary);
-  transform: translateY(-2px);
+  transform: translateY(-1px);
 }
 
 /* Comment Form */
@@ -787,7 +697,6 @@ body {
   gap: 12px;
 }
 
-/* NEW: Reply Indicator */
 .relife-reply-indicator {
   display: flex;
   align-items: center;
@@ -796,7 +705,7 @@ body {
   background: rgba(0, 122, 255, 0.08);
   border-radius: 12px;
   border-left: 4px solid var(--liquid-primary);
-  animation: slideDown 0.3s ease;
+  animation: slideDown 0.2s ease;
 }
 
 @keyframes slideDown {
@@ -833,7 +742,7 @@ body {
   border-radius: 50%;
   color: var(--liquid-danger);
   cursor: pointer;
-  transition: all 0.3s ease;
+  transition: background 0.2s ease, transform 0.2s ease;
 }
 
 .relife-btn-cancel-reply:hover {
@@ -844,17 +753,15 @@ body {
 .relife-comment-input {
   width: 100%;
   padding: 16px 20px;
-  background: rgba(255, 255, 255, 0.5);
-  backdrop-filter: blur(var(--blur-light));
-  -webkit-backdrop-filter: blur(var(--blur-light));
-  border: 2px solid transparent;
+  background: rgba(200, 255, 255, 0.8);
+  border: 2px solid black;
   border-radius: 16px;
   font-size: 1rem;
   font-family: inherit;
   color: var(--text-primary);
   resize: vertical;
   min-height: 100px;
-  transition: all 0.3s ease;
+  transition: background 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
 .relife-comment-input::placeholder {
@@ -863,9 +770,9 @@ body {
 
 .relife-comment-input:focus {
   outline: none;
-  background: rgba(255, 255, 255, 0.8);
+  background: white;
   border-color: var(--liquid-primary);
-  box-shadow: 0 4px 16px rgba(0, 122, 255, 0.15);
+  box-shadow: 0 2px 8px rgba(0, 122, 255, 0.15);
 }
 
 .relife-btn-primary {
@@ -880,14 +787,14 @@ body {
   font-weight: 700;
   font-size: 1rem;
   cursor: pointer;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  box-shadow: 0 4px 16px rgba(0, 122, 255, 0.3);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  box-shadow: 0 2px 8px rgba(0, 122, 255, 0.3);
   align-self: flex-end;
 }
 
 .relife-btn-primary:hover {
   transform: translateY(-2px);
-  box-shadow: 0 6px 24px rgba(0, 122, 255, 0.4);
+  box-shadow: 0 4px 12px rgba(0, 122, 255, 0.4);
 }
 
 .relife-btn-primary:active {
@@ -905,41 +812,34 @@ body {
   gap: 16px;
 }
 
-/* Comment Styles */
 .relife-comment {
   padding: 20px;
-  background: rgba(255, 255, 255, 0.5);
-  backdrop-filter: blur(var(--blur-light));
-  -webkit-backdrop-filter: blur(var(--blur-light));
-  border: 1px solid rgba(255, 255, 255, 0.3);
+  background: rgba(255, 255, 255, 0.8);
+  border: 1px solid rgba(142, 142, 147, 0.15);
   border-radius: 16px;
-  transition: all 0.3s ease;
-  animation: fadeInUp 0.4s ease;
+  transition: background 0.2s ease;
+  animation: fadeInUp 0.3s ease;
   position: relative;
 }
 
 .relife-comment:hover {
-  background: rgba(255, 255, 255, 0.7);
-  transform: translateX(4px);
+  background: rgba(255, 255, 255, 0.95);
 }
 
-/* NEW: Nested Reply Style - Limit indent, use visual cues */
 .relife-comment.reply {
   margin-left: 40px;
   background: rgba(0, 122, 255, 0.05);
   border-left: 3px solid var(--liquid-primary);
 }
 
-/* NEW: Max 2 levels of visual indent, deeper replies use same style */
 .relife-comment.reply-level-2,
 .relife-comment.reply-level-3,
 .relife-comment.reply-level-4,
 .relife-comment.reply-level-5 {
-  margin-left: 40px; /* Same as level 1 */
+  margin-left: 40px;
   border-left-width: 3px;
 }
 
-/* NEW: Different border colors for depth visual cue */
 .relife-comment.reply-level-1 {
   border-left-color: var(--liquid-primary);
 }
@@ -957,23 +857,10 @@ body {
   border-left-color: var(--liquid-warning);
 }
 
-/* NEW: Highlight animation when scrolled to */
 .relife-comment.highlight {
-  animation: highlightPulse 2s ease;
   background: rgba(255, 149, 0, 0.15);
   border-color: var(--liquid-warning);
-  box-shadow: 0 0 0 4px rgba(255, 149, 0, 0.2);
-}
-
-@keyframes highlightPulse {
-  0%, 100% {
-    transform: scale(1);
-    box-shadow: 0 0 0 0 rgba(255, 149, 0, 0);
-  }
-  50% {
-    transform: scale(1.02);
-    box-shadow: 0 0 0 8px rgba(255, 149, 0, 0.3);
-  }
+  box-shadow: 0 0 0 3px rgba(255, 149, 0, 0.2);
 }
 
 .relife-comment-header {
@@ -990,12 +877,11 @@ body {
   object-fit: cover;
   border: 2px solid rgba(0, 122, 255, 0.2);
   cursor: pointer;
-  transition: all 0.3s ease;
+  transition: transform 0.2s ease;
 }
 
 .relife-comment-avatar:hover {
-  transform: scale(1.1);
-  border-color: rgba(0, 122, 255, 0.4);
+  transform: scale(1.05);
 }
 
 .relife-comment-author {
@@ -1034,12 +920,11 @@ body {
   margin-bottom: 12px;
 }
 
-/* NEW: Mention styles */
 .relife-mention {
   color: var(--liquid-primary);
   font-weight: 600;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: background 0.2s ease;
   text-decoration: none;
   background: rgba(0, 122, 255, 0.08);
   padding: 2px 6px;
@@ -1051,7 +936,6 @@ body {
   text-decoration: underline;
 }
 
-/* NEW: Edited badge */
 .relife-edited-badge {
   display: inline-flex;
   align-items: center;
@@ -1066,7 +950,6 @@ body {
   font-size: 0.7rem;
 }
 
-/* NEW: Report warning */
 .relife-comment.reported {
   background: rgba(255, 59, 48, 0.08);
   border-left-color: var(--liquid-danger);
@@ -1089,19 +972,16 @@ body {
   font-size: 0.7rem;
 }
 
-/* NEW: Report modal */
 .relife-report-modal {
   position: fixed;
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
   background: var(--glass-bg);
-  backdrop-filter: blur(var(--blur-amount)) saturate(180%);
-  -webkit-backdrop-filter: blur(var(--blur-amount)) saturate(180%);
   border: 1px solid var(--glass-border);
   border-radius: 20px;
   padding: var(--spacing-xl);
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
   max-width: 400px;
   width: 90%;
   z-index: 10000;
@@ -1110,14 +990,13 @@ body {
 
 .relife-report-modal.show {
   display: block;
-  animation: fadeInUp 0.3s ease;
+  animation: fadeInUp 0.2s ease;
 }
 
 .relife-report-modal-overlay {
   position: fixed;
   inset: 0;
   background: rgba(0, 0, 0, 0.5);
-  backdrop-filter: blur(4px);
   z-index: 9999;
   display: none;
 }
@@ -1148,7 +1027,7 @@ body {
   background: rgba(255, 255, 255, 0.5);
   border-radius: 10px;
   cursor: pointer;
-  transition: all 0.3s ease;
+  transition: background 0.2s ease;
 }
 
 .relife-report-reason label:hover {
@@ -1174,12 +1053,12 @@ body {
   border-radius: 12px;
   font-weight: 700;
   cursor: pointer;
-  transition: all 0.3s ease;
+  transition: background 0.2s ease, transform 0.2s ease;
 }
 
 .relife-btn-danger:hover {
   background: #ff1f1a;
-  transform: translateY(-2px);
+  transform: translateY(-1px);
 }
 
 .relife-btn-cancel {
@@ -1191,24 +1070,22 @@ body {
   border-radius: 12px;
   font-weight: 600;
   cursor: pointer;
-  transition: all 0.3s ease;
+  transition: background 0.2s ease;
 }
 
 .relife-btn-cancel:hover {
   background: rgba(142, 142, 147, 0.3);
 }
 
-/* NEW: Edit comment UI */
 .relife-edit-comment-form {
   margin-top: 12px;
-  animation: slideDown 0.3s ease;
+  animation: slideDown 0.2s ease;
 }
 
 .relife-edit-textarea {
   width: 100%;
   padding: 12px 16px;
-  background: rgba(255, 255, 255, 0.5);
-  backdrop-filter: blur(var(--blur-light));
+  background: rgba(255, 255, 255, 0.8);
   border: 2px solid var(--liquid-primary);
   border-radius: 12px;
   font-size: 0.9375rem;
@@ -1220,8 +1097,8 @@ body {
 
 .relife-edit-textarea:focus {
   outline: none;
-  background: rgba(255, 255, 255, 0.8);
-  box-shadow: 0 4px 16px rgba(0, 122, 255, 0.2);
+  background: white;
+  box-shadow: 0 2px 8px rgba(0, 122, 255, 0.2);
 }
 
 .relife-edit-buttons {
@@ -1239,19 +1116,17 @@ body {
   font-weight: 600;
   font-size: 0.875rem;
   cursor: pointer;
-  transition: all 0.3s ease;
+  transition: background 0.2s ease, transform 0.2s ease;
 }
 
 .relife-btn-save:hover {
   background: #2eb84e;
-  transform: translateY(-2px);
+  transform: translateY(-1px);
 }
 
-/* NEW: Mention dropdown */
 .relife-mention-dropdown {
   position: absolute;
   background: var(--glass-bg);
-  backdrop-filter: blur(var(--blur-amount)) saturate(180%);
   border: 1px solid var(--glass-border);
   border-radius: 12px;
   box-shadow: var(--glass-shadow);
@@ -1295,6 +1170,7 @@ body {
   color: var(--liquid-primary);
   font-size: 0.875rem;
 }
+
 .relife-comment-actions {
   display: flex;
   align-items: center;
@@ -1314,16 +1190,12 @@ body {
   font-size: 0.8125rem;
   font-weight: 600;
   cursor: pointer;
-  transition: all 0.3s ease;
+  transition: background 0.2s ease, color 0.2s ease;
 }
 
 .relife-comment-action-btn:hover {
   background: rgba(0, 122, 255, 0.1);
   color: var(--liquid-primary);
-}
-
-.relife-comment-action-btn.delete {
-  color: var(--text-secondary);
 }
 
 .relife-comment-action-btn.delete:hover {
@@ -1335,7 +1207,6 @@ body {
   font-size: 0.875rem;
 }
 
-/* NEW: Toggle Replies Button */
 .relife-toggle-replies {
   display: inline-flex;
   align-items: center;
@@ -1348,13 +1219,12 @@ body {
   font-size: 0.8125rem;
   font-weight: 600;
   cursor: pointer;
-  transition: all 0.3s ease;
+  transition: background 0.2s ease;
   margin-top: 8px;
 }
 
 .relife-toggle-replies:hover {
   background: rgba(0, 122, 255, 0.15);
-  transform: translateX(4px);
 }
 
 .relife-toggle-replies.expanded {
@@ -1364,20 +1234,18 @@ body {
 
 .relife-toggle-replies i {
   font-size: 0.75rem;
-  transition: transform 0.3s ease;
+  transition: transform 0.2s ease;
 }
 
 .relife-toggle-replies.expanded i {
   transform: rotate(180deg);
 }
 
-/* NEW: Replies Container */
 .relife-replies-container {
   margin-top: 8px;
-  animation: slideDown 0.3s ease;
+  animation: slideDown 0.2s ease;
 }
 
-/* NEW: Reply To Indicator in Comment */
 .relife-reply-to {
   display: inline-flex;
   align-items: center;
@@ -1390,19 +1258,13 @@ body {
   font-weight: 600;
   margin-bottom: 8px;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: background 0.2s ease, border-color 0.2s ease;
   border: 1px solid transparent;
 }
 
 .relife-reply-to:hover {
   background: rgba(0, 122, 255, 0.15);
   border-color: rgba(0, 122, 255, 0.3);
-  transform: translateY(-2px);
-  box-shadow: 0 2px 8px rgba(0, 122, 255, 0.2);
-}
-
-.relife-reply-to:active {
-  transform: translateY(0);
 }
 
 .relife-reply-to i {
@@ -1416,8 +1278,6 @@ body {
   position: fixed;
   inset: 0;
   background: rgba(0, 0, 0, 0.95);
-  backdrop-filter: blur(40px);
-  -webkit-backdrop-filter: blur(40px);
   display: none;
   align-items: center;
   justify-content: center;
@@ -1450,7 +1310,7 @@ body {
   cursor: grab;
   display: block;
   border-radius: 12px;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.8);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.8);
   will-change: transform;
   transform-origin: 0 0;
 }
@@ -1473,13 +1333,11 @@ body {
   width: 44px;
   height: 44px;
   background: rgba(255, 255, 255, 0.1);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
   color: white;
   border: 1px solid rgba(255, 255, 255, 0.2);
   border-radius: 12px;
   cursor: pointer;
-  transition: all 0.3s ease;
+  transition: background 0.2s ease, transform 0.2s ease;
   font-size: 1.125rem;
 }
 
@@ -1497,8 +1355,6 @@ body {
   color: white;
   font-weight: 700;
   background: rgba(0, 0, 0, 0.5);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
   padding: 8px 16px;
   border-radius: 999px;
   font-size: 0.9375rem;
@@ -1514,8 +1370,6 @@ body {
   font-size: 0.875rem;
   pointer-events: none;
   background: rgba(0, 0, 0, 0.3);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
   padding: 8px 16px;
   border-radius: 8px;
   border: 1px solid rgba(255, 255, 255, 0.1);
@@ -1529,7 +1383,7 @@ body {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: var(--spacing-xl) * 2;
+  padding: calc(var(--spacing-xl) * 2);
   color: var(--text-secondary);
   gap: var(--spacing-md);
 }
@@ -1559,13 +1413,11 @@ body {
   gap: 8px;
   padding: 10px 16px;
   background: var(--glass-bg);
-  backdrop-filter: blur(var(--blur-amount)) saturate(180%);
-  -webkit-backdrop-filter: blur(var(--blur-amount)) saturate(180%);
   border: 1px solid var(--glass-border);
   border-radius: 999px;
   box-shadow: var(--glass-shadow);
   z-index: 999;
-  animation: fadeInUp 0.6s ease;
+  animation: fadeInUp 0.3s ease;
 }
 
 .relife-version-label {
@@ -1640,14 +1492,6 @@ body {
     padding: 8px 12px;
   }
   
-  .relife-orb-1,
-  .relife-orb-2,
-  .relife-orb-3 {
-    width: 250px;
-    height: 250px;
-  }
-  
-  /* Nested replies on mobile */
   .relife-comment.reply,
   .relife-comment.reply-level-1,
   .relife-comment.reply-level-2,
@@ -1715,7 +1559,7 @@ body {
    ============================================ */
 @media (prefers-color-scheme: dark) {
   :root {
-    --glass-bg: rgba(28, 28, 30, 0.72);
+    --glass-bg: rgba(28, 28, 30, 0.9);
     --glass-border: rgba(255, 255, 255, 0.1);
     --text-primary: #f5f5f7;
     --text-secondary: #98989d;
@@ -1723,24 +1567,13 @@ body {
   }
   
   body {
-    background: #000000;
-  }
-  
-  .relife-gradient {
-    background: linear-gradient(
-      135deg,
-      rgba(0, 122, 255, 0.15) 0%,
-      rgba(88, 86, 214, 0.12) 25%,
-      rgba(255, 45, 85, 0.1) 50%,
-      rgba(52, 199, 89, 0.12) 75%,
-      rgba(0, 122, 255, 0.15) 100%
-    );
+    background: linear-gradient(135deg, #000000 0%, #1c1c1e 100%);
   }
   
   .post-content,
   .relife-comment,
   .relife-reaction-btn {
-    background: rgba(28, 28, 30, 0.6);
+    background: rgba(28, 28, 30, 0.8);
     border-color: rgba(255, 255, 255, 0.1);
   }
   
@@ -1753,11 +1586,11 @@ body {
   }
   
   .relife-comment-input {
-    background: rgba(28, 28, 30, 0.5);
+    background: rgba(28, 28, 30, 0.8);
   }
   
   .relife-comment-input:focus {
-    background: rgba(28, 28, 30, 0.8);
+    background: rgba(28, 28, 30, 0.95);
   }
 }
 
@@ -1771,11 +1604,6 @@ body {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
-  }
-  
-  .relife-orb,
-  .relife-gradient {
-    animation: none;
   }
 }
 
@@ -1802,7 +1630,6 @@ textarea:focus-visible {
   padding-bottom: 1rem;
 }
 
-/* Hidden renderer for Quill */
 #__qs_hidden_renderer {
   position: absolute;
   left: -99999px;

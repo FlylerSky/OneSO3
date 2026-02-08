@@ -1,0 +1,383 @@
+<script type="text/javascript" charset="utf-8">
+ function doGet() {
+  return HtmlService.createHtmlOutputFromFile('sampyte')
+      .setTitle('SamPyte V1.2 - Secure Mode')
+      .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+}
+
+// ==========================================
+// KHU VỰC DỮ LIỆU BÍ MẬT (SERVER SIDE ONLY)
+// ==========================================
+
+const charToValue = {
+  "A" : 1, "B" : 2, "C" : 3, "D" : 4, "E" : 5, "F" : 6, "G" : 7, "H" : 8, "I" : 9, "J" : 10,
+  "K" : 11, "L" : 12, "M" : 13, "N" : 14, "O" : 15, "P" : 16, "Q" : 17, "R" : 18, "S" : 19, "T" : 20,
+  "U" : 21, "V" : 22, "W" : 23, "X" : 24, "Y" : 25, "Z" : 26,
+  "Ă" : 27, "Â" : 28, "Đ" : 29, "Ê" : 30, "Ô" : 31, "Ơ" : 32, "Ư" : 33,
+  "Á" : 34, "À" : 35, "Ả" : 36, "Ã" : 37, "Ạ" : 38,
+  "É" : 39, "È" : 40, "Ẻ" : 41, "Ẽ" : 42, "Ẹ" : 43,
+  "Í" : 44, "Ì" : 45, "Ỉ" : 46, "Ĩ" : 47, "Ị" : 48,
+  "Ó" : 49, "Ò" : 50, "Ỏ" : 51, "Õ" : 52, "Ọ" : 53,
+  "Ú" : 54, "Ù" : 55, "Ủ" : 56, "Ũ" : 57, "Ụ" : 58,
+  "Ý" : 59, "Ỳ" : 60, "Ỷ" : 61, "Ỹ" : 62, "Ỵ" : 63,
+  "Ắ" : 64, "Ằ" : 65, "Ẳ" : 66, "Ẵ" : 67, "Ặ" : 68,
+  "Ấ" : 69, "Ầ" : 70, "Ẩ" : 71, "Ẫ" : 72, "Ậ" : 73,
+  "Ế" : 74, "Ề" : 75, "Ể" : 76, "Ễ" : 77, "Ệ" : 78,
+  "Ố" : 79, "Ồ" : 80, "Ổ" : 81, "Ỗ" : 82, "Ộ" : 83,
+  "Ớ" : 84, "Ờ" : 85, "Ở" : 86, "Ỡ" : 87, "Ợ" : 88,
+  "Ứ" : 89, "Ừ" : 90, "Ử" : 91, "Ữ" : 92, "ự" : 93, "Ự": 93 // Fix typo lowercase check
+};
+
+// Tạo bảng ngược lại tự động
+function getReverseCharMap() {
+  const map = {};
+  for (let key in charToValue) {
+    map[charToValue[key]] = key;
+  }
+  return map;
+}
+
+const numberToValue = {
+  "0": 1, "1": 2, "2": 3, "3": 4, "4": 5, "5": 6, "6": 7, "7": 8, "8": 9, "9": 10
+};
+
+function getReverseNumberMap() {
+  const map = {};
+  for (let key in numberToValue) {
+    map[numberToValue[key]] = key;
+  }
+  return map;
+}
+
+// ==========================================
+// LOGIC XỬ LÝ (SERVER SIDE ONLY)
+// ==========================================
+
+function getBaseChars(mode, customInput) {
+    if (mode === "10") return "0123456789";
+    if (mode === "36") return "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+    if (!customInput || customInput.trim() === "") {
+        return "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+    }
+    return customInput.trim();
+}
+
+function calculateDecimalValue(word, charBase, numberBase = 10) {
+    if (/^\d+$/.test(word)) { 
+        let value = 0;
+        for (let i = 0; i < word.length; i++) {
+            const digit = word[i];
+            const digitValue = numberToValue[digit];
+            if (digitValue === undefined) return null;
+            value += digitValue * Math.pow(numberBase, word.length - 1 - i);
+        }
+        return value;
+    } else { 
+        word = word.toUpperCase();
+        let value = 0;
+        for (let i = 0; i < word.length; i++) {
+            const char = word[i];
+     const charValue = charToValue[char];
+            if (charValue === undefined) return null;
+            value += charValue * Math.pow(charBase, word.length - 1 - i);
+        }
+        return value;
+    }
+}
+
+// Hàm API được gọi từ Client để Mã hóa
+function apiEncode(text, baseMode, customBaseInput) {
+    const baseChars = getBaseChars(baseMode, customBaseInput);
+    const lines = text.split('\n');
+    const base = baseChars.length;
+    const charBase = Object.keys(charToValue).length;
+    const numberBase = 10;
+    let encodedLines = [];
+
+    for (let line of lines) {
+        if (line.trim() === "") {
+            encodedLines.push("");
+            continue;
+        }
+
+        const words = [];
+        let word = "";
+        let spaces = [];
+
+        for (let i = 0; i <= line.length; i++) {
+            const char = i < line.length ? line[i] : " ";
+            if (char === " ") {
+                if (word) {
+                    words.push({ text: word, spacesBefore: spaces.join("") });
+                    word = "";
+                    spaces = [];
+                }
+                spaces.push(" ");
+            } else {
+                word += char;
+            }
+        }
+
+        let result = "";
+        let i = 0;
+
+        while (i < words.length) {
+            const currentWord = words[i].text;
+            const spacesBefore = words[i].spacesBefore || "";
+            const isNumber = /^\d+$/.test(currentWord);
+            const value = calculateDecimalValue(currentWord, charBase, numberBase);
+
+            if (value === null) {
+                result += spacesBefore + currentWord;
+                i++;
+                continue;
+            }
+
+            let encoded = "";
+            if (value === 0) {
+                encoded = baseChars[0];
+            } else {
+                let num = value;
+                while (num > 0) {
+                    encoded = baseChars[num % base] + encoded;
+                    num = Math.floor(num / base);
+                }
+            }
+
+            if (isNumber) {
+                let j = i + 1;
+                while (j < words.length && /^\d+$/.test(words[j].text) && calculateDecimalValue(words[j].text, charBase, numberBase) !== null) j++;
+                const rangeLength = j - i;
+
+                if (rangeLength > 1) {
+                    let numberRange = [];
+                    for (let k = i; k < j; k++) {
+                        const numValue = calculateDecimalValue(words[k].text, charBase, numberBase);
+                        let numEncoded = "";
+                        if (numValue === 0) {
+                            numEncoded = baseChars[0];
+                        } else {
+                            let num = numValue;
+                            while (num > 0) {
+                                numEncoded = baseChars[num % base] + numEncoded;
+                                num = Math.floor(num / base);
+                            }
+                        }
+                        numberRange.push(numEncoded);
+                    }
+                    result += spacesBefore + "{" + numberRange.join(" ") + "}";
+                    i = j;
+                } else {
+                    result += spacesBefore + "|" + encoded;
+                    i++;
+                }
+            } else {
+                const upperWord = currentWord.toUpperCase();
+                const isAllUpper = currentWord === upperWord;
+                const isFirstUpper = currentWord[0] === currentWord[0]?.toUpperCase() && currentWord.slice(1) !== currentWord.slice(1).toUpperCase();
+
+                if (isAllUpper) {
+                    let j = i + 1;
+                    while (j < words.length && words[j].text === words[j].text.toUpperCase() && !/^\d+$/.test(words[j].text) && calculateDecimalValue(words[j].text.toUpperCase(), charBase, numberBase) !== null) j++;
+                    const rangeLength = j - i;
+
+                    if (rangeLength > 1) {
+                        for (let k = i; k < j; k++) {
+                            const rangeValue = calculateDecimalValue(words[k].text.toUpperCase(), charBase, numberBase);
+                            let rangeEncoded = "";
+                            if (rangeValue === 0) {
+                                rangeEncoded = baseChars[0];
+                            } else {
+                                let num = rangeValue;
+                                while (num > 0) {
+                                    rangeEncoded = baseChars[num % base] + rangeEncoded;
+                                    num = Math.floor(num / base);
+                                }
+                            }
+                            if (k === i) result += spacesBefore + "\\" + rangeEncoded;
+                            else if (k === j - 1) result += " " + rangeEncoded + "\\";
+                            else result += " " + rangeEncoded;
+                        }
+                        i = j;
+                    } else {
+                        result += spacesBefore + "/" + encoded;
+                        i++;
+                    }
+                } else if (isFirstUpper) {
+                    result += spacesBefore + "." + encoded;
+                    i++;
+                } else {
+                    result += spacesBefore + encoded;
+                    i++;
+                }
+            }
+        }
+        encodedLines.push(result);
+    }
+    return encodedLines.join("\n");
+}
+
+// Hàm API được gọi từ Client để Giải mã
+function apiDecode(codeStr, baseMode, customBaseInput) {
+    const baseChars = getBaseChars(baseMode, customBaseInput);
+    const valueToChar = getReverseCharMap();
+    const valueToNumber = getReverseNumberMap();
+    
+    const lines = codeStr.split('\n');
+    const base = baseChars.length;
+    const charBase = Object.keys(valueToChar).length;
+    const numberBase = 10;
+    let decodedLines = [];
+
+    for (let line of lines) {
+        if (line.trim() === "") {
+            decodedLines.push("");
+            continue;
+        }
+
+        const codes = [];
+        let code = "";
+        let spaces = [];
+
+        for (let i = 0; i <= line.length; i++) {
+            const char = i < line.length ? line[i] : " ";
+            if (char === " ") {
+                if (code) {
+                    codes.push({ text: code, spacesBefore: spaces.join("") });
+                    code = "";
+                    spaces = [];
+                }
+                spaces.push(" ");
+            } else {
+                code += char;
+            }
+        }
+
+        let result = "";
+        let i = 0;
+        let inUpperRange = false;
+
+        while (i < codes.length) {
+            let currentCode = codes[i].text;
+            const spacesBefore = codes[i].spacesBefore || "";
+            let prefix = "", suffix = "";
+
+            if ([".", "/", "\\", "|", "{", "}"].includes(currentCode)) {
+                result += spacesBefore + currentCode;
+                i++;
+                continue;
+            }
+
+            if (currentCode.startsWith(".")) { prefix = "."; currentCode = currentCode.slice(1); }
+            else if (currentCode.startsWith("/")) { prefix = "/"; currentCode = currentCode.slice(1); }
+            else if (currentCode.startsWith("\\")) { prefix = "\\"; currentCode = currentCode.slice(1); }
+            else if (currentCode.startsWith("|")) { prefix = "|"; currentCode = currentCode.slice(1); }
+            else if (currentCode.startsWith("{")) { prefix = "{"; currentCode = currentCode.slice(1); }
+            if (currentCode.endsWith("\\")) { suffix = "\\"; currentCode = currentCode.slice(0, -1); }
+            if (currentCode.endsWith("}")) { suffix = "}"; currentCode = currentCode.slice(0, -1); }
+
+            let value = 0;
+            let isValid = true;
+            for (let j = 0; j < currentCode.length; j++) {
+                const char = currentCode[j];
+                if (!char || typeof char !== 'string') { isValid = false; break; }
+                const charValue = baseChars.indexOf(char.toUpperCase());
+                if (charValue === -1) { isValid = false; break; }
+                value = value * base + charValue;
+            }
+
+            if (!isValid) {
+                result += spacesBefore + codes[i].text;
+                i++;
+                continue;
+            }
+
+            if (prefix === "|" || prefix === "{") {
+                let word = "";
+                while (value > 0) {
+                    const digitValue = (value - 1) % numberBase + 1;
+                    const digit = valueToNumber[digitValue];
+                    if (!digit) break;
+                    word = digit + word;
+                    value = Math.floor((value - 1) / numberBase);
+                }
+                if (prefix === "|") {
+                    result += spacesBefore + word;
+                    i++;
+                } else if (prefix === "{") {
+                    result += spacesBefore + word;
+                    let j = i + 1;
+                    while (j < codes.length && !codes[j].text.endsWith("}")) {
+                        value = 0;
+                        for (let k = 0; k < codes[j].text.length; k++) {
+                            const char = codes[j].text[k];
+                            const charValue = baseChars.indexOf(char.toUpperCase());
+                            if (charValue === -1) break;
+                            value = value * base + charValue;
+                        }
+                        word = "";
+                        while (value > 0) {
+                            const digitValue = (value - 1) % numberBase + 1;
+                            const digit = valueToNumber[digitValue];
+                            if (!digit) break;
+                            word = digit + word;
+                            value = Math.floor((value - 1) / numberBase);
+                        }
+                        result += " " + word;
+                        j++;
+                    }
+                    if (j < codes.length && codes[j].text.endsWith("}")) {
+                        value = 0;
+                        const lastCode = codes[j].text.slice(0, -1);
+                        for (let k = 0; k < lastCode.length; k++) {
+                            const char = lastCode[k];
+                            const charValue = baseChars.indexOf(char.toUpperCase());
+                            if (charValue === -1) break;
+                            value = value * base + charValue;
+                        }
+                        word = "";
+                        while (value > 0) {
+                            const digitValue = (value - 1) % numberBase + 1;
+                            const digit = valueToNumber[digitValue];
+                            if (!digit) break;
+                            word = digit + word;
+                            value = Math.floor((value - 1) / numberBase);
+                        }
+                        result += " " + word;
+                        i = j;
+                    }
+                    i++;
+                }
+            } else {
+                let word = "";
+                while (value > 0) {
+                    const remainder = (value - 1) % charBase;
+                    const char = valueToChar[remainder + 1];
+                    if (!char) break;
+                    word = char + word;
+                    value = Math.floor((value - 1) / charBase);
+                }
+
+                if (prefix === "\\") {
+                    inUpperRange = true;
+                    result += spacesBefore + word.toUpperCase();
+                } else if (suffix === "\\") {
+                    result += spacesBefore + word.toUpperCase();
+                    inUpperRange = false;
+                } else if (inUpperRange) {
+                    result += spacesBefore + word.toUpperCase();
+                } else if (prefix === "/") {
+                    result += spacesBefore + word.toUpperCase();
+                } else if (prefix === ".") {
+                    result += spacesBefore + word[0].toUpperCase() + word.slice(1).toLowerCase();
+                } else {
+                    result += spacesBefore + word.toLowerCase();
+                }
+                i++;
+            }
+        }
+        decodedLines.push(result);
+    }
+    return decodedLines.join("\n");
+}
+</script>

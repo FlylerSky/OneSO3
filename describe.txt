@@ -239,3 +239,10 @@ Relife 3.1: Khắc phục lỗi không thể xóa comment
 - Thêm khả năng đổi avatar của mình trên trang Profile
 -Thêm mục sửa giới tính, quốc gia, sinh nhật
 - Đã điều chỉnh giới hạn viết mô tả trên Profile còn 1000 kí tự thay vì vô hạn
+Relife 4 (r4.2.226):
+-Đã thêm lịch sử tìm kiếm (với khả năng lưu lại 5 lượt tìm kiếm gần nhất của user, có thể xóa lịch sử tìm kiếm)
+-Tìm kiếm user trở nên trực quan hơn trên thanh tìm kiếm (Hiển thị cả avatar và cả nút để follow trực tiếp trên thanh tìm kiếm.
+-Tìm kiếm bài viết trở nên chi tiết hơn khi đã có hiển thị lượt like và lượt comment ngay tại thanh tìm kiếm
+-Phần Menu đã được điều chỉnh: Ở phần thông tin user có hiển thị thêm UID tài khoản để khi mất tài khoản có thể dùng UID này yêu cầu khôi phục, có thể nhấn vào phần thông tin này để vào trang profile
+-+ Sắp xếp lại bố cục các nút để vào các trang, các nút đã được làm thành dạng block to hơn và mỗi hàng 2 nút.
+- Trên trang INDEX, giòe đây sẽ không load toàn bộ bài viết mà chỉ load một ít (khoảng 10 bài), khi người dùng lướt đến thì mới load thêm
