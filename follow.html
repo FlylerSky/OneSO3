@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Relife — Theo dõi & Bạn bè</title>
+
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+
+  <!-- Relife UI 1.1 CSS -->
+  <link href="CSS/follow.css" rel="stylesheet">
+</head>
+<body>
+  <!-- Animated Background -->
+  <div class="relife-bg">
+    <div class="relife-gradient"></div>
+    <div class="relife-orb relife-orb-1"></div>
+    <div class="relife-orb relife-orb-2"></div>
+    <div class="relife-orb relife-orb-3"></div>
+  </div>
+
+  <div class="container container-main">
+    <!-- Header with Tab Switcher -->
+    <div class="relife-header" id="mainHeader">
+      <div class="d-flex align-items-center gap-3 flex-fill">
+        <a href="index.html" class="relife-back-btn" title="Quay lại">
+          <i class="bi bi-arrow-left"></i>
+        </a>
+        <div class="relife-page-title">
+          <h4 class="mb-0">Theo dõi & Bạn bè</h4>
+          <div class="relife-subtitle">Quản lý kết nối của bạn</div>
+        </div>
+      </div>
+      
+      <!-- Tab Switcher -->
+      <div class="relife-tab-switcher">
+        <button class="relife-tab-btn active" data-tab="following" id="tabFollowing">
+          <i class="bi bi-person-plus-fill"></i>
+          <span>Theo dõi</span>
+          <span class="relife-badge" id="followingCount">0</span>
+        </button>
+        <button class="relife-tab-btn" data-tab="friends" id="tabFriends">
+          <i class="bi bi-people-fill"></i>
+          <span>Bạn bè</span>
+          <span class="relife-badge" id="friendsCount">0</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- User Section (Horizontal scrollable list) -->
+    <div class="relife-user-section" id="userSection">
+      <div class="user-section-header">
+        <div class="user-section-title">
+          <i class="bi bi-person-lines-fill"></i>
+          <span id="userSectionLabel">Danh sách theo dõi</span>
+        </div>
+        <button class="relife-toggle-view-btn" id="toggleViewBtn">
+          <i class="bi bi-grid-3x3-gap-fill"></i>
+          <span>Chỉ user</span>
+        </button>
+      </div>
+      
+      <!-- Horizontal User List (Default) -->
+      <div class="relife-user-list horizontal" id="userListHorizontal">
+        <div class="relife-loading">
+          <div class="relife-spinner"></div>
+          <div>Đang tải...</div>
+        </div>
+      </div>
+      
+      <!-- Vertical User Grid (Hidden by default) -->
+      <div class="relife-user-grid" id="userGrid" style="display:none;">
+        <div class="relife-loading">
+          <div class="relife-spinner"></div>
+          <div>Đang tải...</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Posts Section -->
+    <div class="relife-posts-section">
+      <div class="posts-section-header">
+        <div class="posts-section-title">
+          <i class="bi bi-newspaper"></i>
+          <span id="postsSectionLabel">Bài viết từ người bạn theo dõi</span>
+        </div>
+        <div class="posts-filter-badge" id="filterBadge" style="display:none;">
+          <i class="bi bi-funnel-fill"></i>
+          <span id="filterUserName"></span>
+          <button class="clear-filter-btn" id="clearFilterBtn">
+            <i class="bi bi-x-lg"></i>
+          </button>
+        </div>
+      </div>
+      
+      <div class="relife-posts-list" id="postsList">
+        <div class="relife-loading">
+          <div class="relife-spinner"></div>
+          <div>Đang tải bài viết...</div>
+        </div>
+      </div>
+      
+      <!-- Loading Indicator -->
+      <div id="loadingIndicator" class="relife-loading" style="display:none;">
+        <div class="relife-spinner"></div>
+        <div>Đang tải thêm...</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Floating Action Buttons (appear on scroll) -->
+  <div class="relife-floating-actions" id="floatingActions" style="display:none;">
+    <button class="relife-fab" id="fabScrollToTop" title="Lên đầu trang">
+      <i class="bi bi-arrow-up"></i>
+    </button>
+    <button class="relife-fab" id="fabScrollToUsers" title="Đến danh sách user">
+      <i class="bi bi-people-fill"></i>
+    </button>
+  </div>
+
+  <!-- Version Badge -->
+  <div class="relife-version-badge">
+    <span class="relife-version-label">Relife</span>
+    <span class="relife-version-number">4.2</span>
+  </div>
+
+  <!-- Scripts -->
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/dompurify@2.4.0/dist/purify.min.js"></script>
+  <script type="module" src="JS/follow.js"></script>
+</body>
+</html>

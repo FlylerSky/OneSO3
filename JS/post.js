@@ -1,6 +1,6 @@
-// JS/post.js - Relife UI 1.5.2 FINAL - Report Fix
-// FIX: Initialize reportCount: 0 when creating comments
-// FIX: Proper error handling for report feature
+// JS/post.js - Relife UI 1.6.0 - Notification Support
+// NEW: Support viewing notifications via ?notification=id param
+// Notifications are read-only (no comments, likes, follow)
 import { initFirebase } from '../firebase-config.js';
 import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-auth.js";
 import {
@@ -11,7 +11,13 @@ import {
 const db = initFirebase();
 const auth = getAuth();
 const params = new URLSearchParams(location.search);
+
+// ✅ NEW: Detect content type and ID
+const notificationId = params.get('notification');
 const postId = params.get('id');
+const isNotification = !!notificationId;
+const contentId = notificationId || postId;
+
 const postArea = document.getElementById('postArea');
 const commentsSection = document.getElementById('commentsSection');
 const hiddenRenderer = document.getElementById('__qs_hidden_renderer');
@@ -528,16 +534,18 @@ async function toggleFollow(targetUserId) {
 }
 
 /**
- * Load and render post
+ * ✅ NEW: Load and render content (supports both posts and notifications)
  */
 async function load() {
-  if(!postId) {
+  if(!contentId) {
     postArea.innerHTML = `
       <div class="relife-glass-card">
         <div class="text-center text-muted py-5">
           <i class="bi bi-exclamation-circle" style="font-size: 3rem; margin-bottom: 1rem;"></i>
-          <div>ID bài viết không hợp lệ.</div>
-          <a href="index.html" class="relife-btn-primary mt-3">Về trang chủ</a>
+          <div>ID ${isNotification ? 'thông báo' : 'bài viết'} không hợp lệ.</div>
+          <a href="${isNotification ? 'notification.html' : 'index.html'}" class="relife-btn-primary mt-3">
+            Về ${isNotification ? 'trang thông báo' : 'trang chủ'}
+          </a>
         </div>
       </div>
     `;
@@ -545,14 +553,19 @@ async function load() {
   }
 
   try {
-    const snap = await getDoc(doc(db, 'posts', postId));
+    // ✅ NEW: Load from appropriate collection
+    const collectionName = isNotification ? 'notifications' : 'posts';
+    const snap = await getDoc(doc(db, collectionName, contentId));
+    
     if(!snap.exists()) {
       postArea.innerHTML = `
         <div class="relife-glass-card">
           <div class="text-center text-muted py-5">
             <i class="bi bi-file-earmark-x" style="font-size: 3rem; margin-bottom: 1rem;"></i>
-            <div>Không tìm thấy bài viết</div>
-            <a href="index.html" class="relife-btn-primary mt-3">Về trang chủ</a>
+            <div>Không tìm thấy ${isNotification ? 'thông báo' : 'bài viết'}</div>
+            <a href="${isNotification ? 'notification.html' : 'index.html'}" class="relife-btn-primary mt-3">
+              Về ${isNotification ? 'trang thông báo' : 'trang chủ'}
+            </a>
           </div>
         </div>
       `;
@@ -562,65 +575,92 @@ async function load() {
     const d = snap.data();
     currentPostData = d;
 
-    // Get author info
-    let authorHtml = '';
-    let authorAvatar = '';
-    let followBtnHtml = '';
+    // ✅ NEW: Build header based on content type
+    let headerHtml = '';
     
-    if(d.userId) {
-      const userSnap = await getDoc(doc(db, 'users', d.userId));
-      const prof = userSnap.exists() ? userSnap.data() : null;
-      authorAvatar = prof?.avatarUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(prof?.displayName||d.displayName||'U')}&background=0D6EFD&color=fff&size=128`;
-      const tag = prof?.tagName || d.authorTag || '';
+    if(isNotification) {
+      // Notification header (read-only, no author)
+      const categoryIcon = getCategoryIcon(d.category);
+      const categoryLabel = getCategoryLabel(d.category);
+      const priorityBadge = d.priority === 'high' 
+        ? '<span class="relife-notification-badge priority-high"><i class="bi bi-exclamation-triangle-fill"></i> Quan trọng</span>' 
+        : '';
       
-      // Check if current user is author
-      const currentUser = auth.currentUser;
-      const isAuthor = currentUser && currentUser.uid === d.userId;
-      
-      // Follow button (only for non-authors)
-      if(currentUser && !isAuthor) {
-        const isFollowing = await checkFollowStatus(d.userId);
-        followBtnHtml = `
-          <button id="followBtn" class="relife-follow-btn ${isFollowing ? 'following' : ''}" onclick="window.toggleFollowFromPost()">
-            <i class="bi bi-${isFollowing ? 'check-lg' : 'person-plus-fill'}"></i>
-            <span>${isFollowing ? 'Đang theo dõi' : 'Theo dõi'}</span>
-          </button>
-        `;
-      }
-      
-      authorHtml = `
+      headerHtml = `
         <div class="relife-post-header">
-          <img src="${authorAvatar}" class="relife-author-avatar" alt="avatar" onclick="window.navigateToProfile('${d.userId}')">
+          <div class="relife-notification-icon">
+            ${categoryIcon}
+          </div>
           <div class="relife-author-info">
-            <div class="relife-author-name" onclick="window.navigateToProfile('${d.userId}')">${esc(d.displayName || prof?.displayName || 'Người dùng')}</div>
-            <div class="relife-author-meta">
-              ${tag ? `<div class="relife-author-tag" onclick="window.navigateToProfile('${d.userId}')">${esc(tag)}</div>` : ''}
-              <div class="relife-post-time">
-                <i class="bi bi-clock"></i>
-                <span>${fmtDate(d.createdAt)}</span>
-              </div>
-              ${followBtnHtml}
+            <div class="relife-notification-category">
+              ${categoryLabel}
+              ${priorityBadge}
+            </div>
+            <div class="relife-post-time">
+              <i class="bi bi-clock"></i>
+              <span>${fmtDate(d.createdAt)}</span>
             </div>
           </div>
         </div>
       `;
     } else {
-      authorAvatar = `https://ui-avatars.com/api/?name=${encodeURIComponent(d.displayName||'T')}&background=FFC107&color=000&size=128`;
-      authorHtml = `
-        <div class="relife-post-header">
-          <img src="${authorAvatar}" class="relife-author-avatar" alt="avatar">
-          <div class="relife-author-info">
-            <div class="relife-author-name">${esc(d.displayName || 'Tài khoản thử nghiệm')}</div>
-            <div class="relife-author-meta">
-              <span class="relife-trial-badge">Tài khoản thử nghiệm</span>
-              <div class="relife-post-time">
-                <i class="bi bi-clock"></i>
-                <span>${fmtDate(d.createdAt)}</span>
+      // Post header (with author, follow button, etc.)
+      let authorAvatar = '';
+      let followBtnHtml = '';
+      
+      if(d.userId) {
+        const userSnap = await getDoc(doc(db, 'users', d.userId));
+        const prof = userSnap.exists() ? userSnap.data() : null;
+        authorAvatar = prof?.avatarUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(prof?.displayName||d.displayName||'U')}&background=0D6EFD&color=fff&size=128`;
+        const tag = prof?.tagName || d.authorTag || '';
+        
+        const currentUser = auth.currentUser;
+        const isAuthor = currentUser && currentUser.uid === d.userId;
+        
+        if(currentUser && !isAuthor) {
+          const isFollowing = await checkFollowStatus(d.userId);
+          followBtnHtml = `
+            <button id="followBtn" class="relife-follow-btn ${isFollowing ? 'following' : ''}" onclick="window.toggleFollowFromPost()">
+              <i class="bi bi-${isFollowing ? 'check-lg' : 'person-plus-fill'}"></i>
+              <span>${isFollowing ? 'Đang theo dõi' : 'Theo dõi'}</span>
+            </button>
+          `;
+        }
+        
+        headerHtml = `
+          <div class="relife-post-header">
+            <img src="${authorAvatar}" class="relife-author-avatar" alt="avatar" onclick="window.navigateToProfile('${d.userId}')">
+            <div class="relife-author-info">
+              <div class="relife-author-name" onclick="window.navigateToProfile('${d.userId}')">${esc(d.displayName || prof?.displayName || 'Người dùng')}</div>
+              <div class="relife-author-meta">
+                ${tag ? `<div class="relife-author-tag" onclick="window.navigateToProfile('${d.userId}')">${esc(tag)}</div>` : ''}
+                <div class="relife-post-time">
+                  <i class="bi bi-clock"></i>
+                  <span>${fmtDate(d.createdAt)}</span>
+                </div>
+                ${followBtnHtml}
               </div>
             </div>
           </div>
-        </div>
-      `;
+        `;
+      } else {
+        authorAvatar = `https://ui-avatars.com/api/?name=${encodeURIComponent(d.displayName||'T')}&background=FFC107&color=000&size=128`;
+        headerHtml = `
+          <div class="relife-post-header">
+            <img src="${authorAvatar}" class="relife-author-avatar" alt="avatar">
+            <div class="relife-author-info">
+              <div class="relife-author-name">${esc(d.displayName || 'Tài khoản thử nghiệm')}</div>
+              <div class="relife-author-meta">
+                <span class="relife-trial-badge">Tài khoản thử nghiệm</span>
+                <div class="relife-post-time">
+                  <i class="bi bi-clock"></i>
+                  <span>${fmtDate(d.createdAt)}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        `;
+      }
     }
 
     // Render content
@@ -633,63 +673,75 @@ async function load() {
       rendered = DOMPurify.sanitize(String(raw), PURIFY_CFG_ALLOW_CLASS);
     }
 
-    // Hashtags
-    const hashtagsHtml = (d.hashtags||[]).map(h => 
-      `<a href="tag.html?tag=${encodeURIComponent(h)}" class="relife-hashtag">
-        <i class="bi bi-hash"></i>${esc(h.replace(/^#/, ''))}
-      </a>`
-    ).join('');
+    // Hashtags (only for posts)
+    const hashtagsHtml = !isNotification && d.hashtags 
+      ? (d.hashtags||[]).map(h => 
+          `<a href="tag.html?tag=${encodeURIComponent(h)}" class="relife-hashtag">
+            <i class="bi bi-hash"></i>${esc(h.replace(/^#/, ''))}
+          </a>`
+        ).join('')
+      : '';
 
-    // Build post HTML
+    // ✅ NEW: Reactions (only for posts)
+    const reactionsHtml = isNotification ? '' : `
+      <div class="relife-reactions">
+        <button id="likeBtn" class="relife-reaction-btn">
+          <i class="bi bi-hand-thumbs-up-fill"></i>
+          <span id="likeCount">${d.likes||0}</span>
+        </button>
+        <button id="dislikeBtn" class="relife-reaction-btn">
+          <i class="bi bi-hand-thumbs-down-fill"></i>
+          <span id="dislikeCount">${d.dislikes||0}</span>
+        </button>
+        <button id="commentToggle" class="relife-reaction-btn">
+          <i class="bi bi-chat-dots-fill"></i>
+          <span id="commentCountBtn">...</span>
+        </button>
+      </div>
+    `;
+
+    // Build final HTML
     postArea.innerHTML = `
       <div class="relife-glass-card">
-        ${authorHtml}
+        ${headerHtml}
         <h1 class="relife-post-title">${esc(d.title || 'Không có tiêu đề')}</h1>
         ${hashtagsHtml ? `<div class="relife-hashtags">${hashtagsHtml}</div>` : ''}
         <div id="postContentContainer" class="post-content">${rendered}</div>
-        
-        <div class="relife-reactions">
-          <button id="likeBtn" class="relife-reaction-btn">
-            <i class="bi bi-hand-thumbs-up-fill"></i>
-            <span id="likeCount">${d.likes||0}</span>
-          </button>
-          <button id="dislikeBtn" class="relife-reaction-btn">
-            <i class="bi bi-hand-thumbs-down-fill"></i>
-            <span id="dislikeCount">${d.dislikes||0}</span>
-          </button>
-          <button id="commentToggle" class="relife-reaction-btn">
-            <i class="bi bi-chat-dots-fill"></i>
-            <span id="commentCountBtn">...</span>
-          </button>
-        </div>
+        ${reactionsHtml}
       </div>
     `;
 
     // Attach image viewer
     attachImageViewerToContent();
 
-    // Show comments section
-    commentsSection.style.display = 'block';
-    // NOTE: Will be updated by onSnapshot (accurate count)
-    document.getElementById('commentCount').textContent = '...';
-
-    // Bind events
-    bindEvents();
-    watchRealtime();
-    updateReactionButtonsState();
+    // ✅ NEW: Only show comments section for posts
+    if(!isNotification) {
+      commentsSection.style.display = 'block';
+      document.getElementById('commentCount').textContent = '...';
+      watchRealtime();
+      updateReactionButtonsState();
+    } else {
+      // Hide comments section for notifications
+      commentsSection.style.display = 'none';
+    }
 
     // Smooth scroll animation
     postArea.querySelector('.relife-glass-card').style.animation = 'fadeInUp 0.5s ease';
+    
+    // Bind events (share button and post-specific features)
+    bindEvents();
 
   } catch(err) {
-    console.error('Load post error:', err);
+    console.error('Load content error:', err);
     postArea.innerHTML = `
       <div class="relife-glass-card">
         <div class="text-center text-danger py-5">
           <i class="bi bi-exclamation-triangle" style="font-size: 3rem; margin-bottom: 1rem;"></i>
-          <div>Lỗi khi tải bài viết</div>
+          <div>Lỗi khi tải ${isNotification ? 'thông báo' : 'bài viết'}</div>
           <small class="text-muted d-block mt-2">${esc(err.message || err)}</small>
-          <a href="index.html" class="relife-btn-primary mt-3">Về trang chủ</a>
+          <a href="${isNotification ? 'notification.html' : 'index.html'}" class="relife-btn-primary mt-3">
+            Về ${isNotification ? 'trang thông báo' : 'trang chủ'}
+          </a>
         </div>
       </div>
     `;
@@ -697,25 +749,49 @@ async function load() {
 }
 
 /**
- * Watch realtime updates
+ * ✅ Helper functions for notification display
+ */
+function getCategoryIcon(category) {
+  const icons = {
+    'update': '<i class="bi bi-arrow-up-circle-fill"></i>',
+    'maintenance': '<i class="bi bi-tools"></i>',
+    'feature': '<i class="bi bi-stars"></i>',
+    'news': '<i class="bi bi-newspaper"></i>'
+  };
+  return icons[category] || icons.news;
+}
+
+function getCategoryLabel(category) {
+  const labels = {
+    'update': 'Cập nhật',
+    'maintenance': 'Bảo trì',
+    'feature': 'Tính năng mới',
+    'news': 'Tin tức'
+  };
+  return labels[category] || 'Tin tức';
+}
+
+/**
+ * Watch realtime updates (POSTS ONLY)
  */
 let commentsUnsub = null;
 function watchRealtime() {
+  if(isNotification) return; // Skip for notifications
+  
   // Watch comments
-  const commentsRef = collection(db, 'posts', postId, 'comments');
+  const commentsRef = collection(db, 'posts', contentId, 'comments');
   const q = query(commentsRef, orderBy('createdAt', 'desc'));
   if(commentsUnsub) commentsUnsub();
   commentsUnsub = onSnapshot(q, snap => {
     renderComments(snap);
     
-    // Update comment count from snapshot.size (ALWAYS ACCURATE)
     const actualCount = snap.size;
     document.getElementById('commentCountBtn').textContent = actualCount;
     document.getElementById('commentCount').textContent = actualCount;
   });
 
-  // Watch post counters (likes/dislikes only, NOT commentsCount)
-  const postRef = doc(db, 'posts', postId);
+  // Watch post counters (likes/dislikes only)
+  const postRef = doc(db, 'posts', contentId);
   onSnapshot(postRef, snap => {
     const d = snap.data();
     if(!d) return;
@@ -932,8 +1008,6 @@ function parseMentions(text, mentionedUserIds) {
   // Find @mentions and wrap in clickable spans
   const mentionRegex = /@(\w+)/g;
   result = result.replace(mentionRegex, (match, tagName) => {
-    // Find matching user ID (would need to fetch from cache or Firestore)
-    // For now, make all @mentions clickable
     return `<span class="relife-mention" onclick="window.navigateToMention('@${esc(tagName)}')">${match}</span>`;
   });
   
@@ -1073,6 +1147,8 @@ document.addEventListener('DOMContentLoaded', () => {
  * Delete comment - SIMPLIFIED (No counter update needed)
  */
 window.deleteComment = async function(commentId) {
+  if(isNotification) return; // Cannot delete comments on notifications
+  
   const user = auth.currentUser;
   if(!user) {
     alert('Bạn cần đăng nhập.');
@@ -1083,7 +1159,7 @@ window.deleteComment = async function(commentId) {
   
   try {
     // Step 1: Get all comments to find replies
-    const commentsRef = collection(db, 'posts', postId, 'comments');
+    const commentsRef = collection(db, 'posts', contentId, 'comments');
     const allCommentsSnap = await getDocs(commentsRef);
     const allComments = [];
     allCommentsSnap.forEach(doc => {
@@ -1117,26 +1193,24 @@ window.deleteComment = async function(commentId) {
     }
     
     const repliesToDelete = findAllReplies(commentId, allComments);
-    const totalToDelete = 1 + repliesToDelete.length; // Parent + all children
+    const totalToDelete = 1 + repliesToDelete.length;
     
     console.log(`Deleting comment ${commentId} and ${repliesToDelete.length} nested replies (total: ${totalToDelete})`);
     
-    // Step 4: Delete all in batch (NO COUNTER UPDATE)
+    // Step 4: Delete all in batch
     const batch = writeBatch(db);
     
     // Delete parent
-    batch.delete(doc(db, 'posts', postId, 'comments', commentId));
+    batch.delete(doc(db, 'posts', contentId, 'comments', commentId));
     
     // Delete all nested replies
     repliesToDelete.forEach(reply => {
-      batch.delete(doc(db, 'posts', postId, 'comments', reply.id));
+      batch.delete(doc(db, 'posts', contentId, 'comments', reply.id));
     });
-    
-    // NOTE: No commentsCount update - using snapshot.size instead!
     
     await batch.commit();
     
-    console.log(`Successfully deleted ${totalToDelete} comments (counter auto-updated by snapshot)`);
+    console.log(`Successfully deleted ${totalToDelete} comments`);
   } catch(err) {
     console.error('Delete comment error:', err);
     alert('Không thể xóa bình luận. Vui lòng thử lại.');
@@ -1147,28 +1221,33 @@ window.deleteComment = async function(commentId) {
  * Bind event listeners
  */
 function bindEvents() {
-  // Share button
-  document.getElementById('shareBtn').addEventListener('click', async () => {
-    try {
-      await navigator.clipboard.writeText(location.href);
-      const btn = document.getElementById('shareBtn');
-      const oldHtml = btn.innerHTML;
-      btn.innerHTML = '<i class="bi bi-check-lg"></i>';
-      btn.style.background = 'rgba(52, 199, 89, 0.2)';
-      btn.style.color = '#34C759';
-      setTimeout(() => {
-        btn.innerHTML = oldHtml;
-        btn.style.background = '';
-        btn.style.color = '';
-      }, 1500);
-    } catch(e) {
-      alert('Không thể sao chép URL');
-    }
-  });
+  // Share button - ALWAYS available (works for both posts and notifications)
+  const shareBtn = document.getElementById('shareBtn');
+  if(shareBtn) {
+    shareBtn.addEventListener('click', async () => {
+      try {
+        await navigator.clipboard.writeText(location.href);
+        const oldHtml = shareBtn.innerHTML;
+        shareBtn.innerHTML = '<i class="bi bi-check-lg"></i>';
+        shareBtn.style.background = 'rgba(52, 199, 89, 0.2)';
+        shareBtn.style.color = '#34C759';
+        setTimeout(() => {
+          shareBtn.innerHTML = oldHtml;
+          shareBtn.style.background = '';
+          shareBtn.style.color = '';
+        }, 1500);
+      } catch(e) {
+        alert('Không thể sao chép URL');
+      }
+    });
+  }
+  
+  // Skip interactive features for notifications
+  if(isNotification) return;
 
   // Reaction buttons
-  document.getElementById('likeBtn').addEventListener('click', () => toggleReaction(postId, 'like'));
-  document.getElementById('dislikeBtn').addEventListener('click', () => toggleReaction(postId, 'dislike'));
+  document.getElementById('likeBtn').addEventListener('click', () => toggleReaction(contentId, 'like'));
+  document.getElementById('dislikeBtn').addEventListener('click', () => toggleReaction(contentId, 'dislike'));
   
   // Comment toggle - smooth scroll
   document.getElementById('commentToggle').addEventListener('click', () => {
@@ -1182,7 +1261,7 @@ function bindEvents() {
     }
   });
 
-  // Send comment - ✅ FIX: Initialize reportCount: 0
+  // Send comment
   document.getElementById('sendComment').addEventListener('click', async () => {
     const text = document.getElementById('commentText').value.trim();
     if(!text) return alert('Viết bình luận trước khi gửi.');
@@ -1207,7 +1286,7 @@ function bindEvents() {
         text,
         createdAt: serverTimestamp(),
         mentions: mentionedUserIds,
-        reportCount: 0  // ✅ FIX: Initialize from start
+        reportCount: 0
       };
       
       // Add reply info if replying
@@ -1216,8 +1295,7 @@ function bindEvents() {
         commentData.replyToName = currentReplyTo.name;
       }
       
-      await addDoc(collection(db, 'posts', postId, 'comments'), commentData);
-      // NOTE: No counter update - snapshot.size will auto-update UI
+      await addDoc(collection(db, 'posts', contentId, 'comments'), commentData);
       
       document.getElementById('commentText').value = '';
       
@@ -1260,9 +1338,11 @@ function bindEvents() {
 }
 
 /**
- * Update reaction buttons visual state
+ * Update reaction buttons visual state (POSTS ONLY)
  */
 async function updateReactionButtonsState() {
+  if(isNotification) return;
+  
   const user = auth.currentUser;
   const likeBtn = document.getElementById('likeBtn');
   const disBtn = document.getElementById('dislikeBtn');
@@ -1274,7 +1354,7 @@ async function updateReactionButtonsState() {
   if(!user) return;
   
   try {
-    const likeDoc = await getDoc(doc(db, 'posts', postId, 'likes', user.uid));
+    const likeDoc = await getDoc(doc(db, 'posts', contentId, 'likes', user.uid));
     if(likeDoc.exists()) {
       const t = likeDoc.data().type;
       if(t === 'like') {
@@ -1289,9 +1369,11 @@ async function updateReactionButtonsState() {
 }
 
 /**
- * Toggle reaction (like/dislike)
+ * Toggle reaction (like/dislike) - POSTS ONLY
  */
 async function toggleReaction(postId, reaction) {
+  if(isNotification) return;
+  
   const user = auth.currentUser;
   if(!user) {
     alert('Bạn cần đăng nhập để tương tác (Like/Dislike).');
@@ -1357,7 +1439,7 @@ document.addEventListener('visibilitychange', () => {
 load();
 
 // ═══════════════════════════════════════════════════════════
-// v1.5 NEW FEATURES: Edit, Report, Mention
+// v1.5 FEATURES: Edit, Report, Mention (POSTS ONLY)
 // ═══════════════════════════════════════════════════════════
 
 /**
@@ -1366,17 +1448,16 @@ load();
 let currentEditingCommentId = null;
 
 window.editComment = async function(commentId) {
+  if(isNotification) return;
+  
   const commentEl = document.getElementById(`comment-${commentId}`);
   if(!commentEl) return;
   
-  // Get original text
   const commentData = JSON.parse(commentEl.getAttribute('data-comment-data'));
   const originalText = commentData.text;
   
-  // Check if already editing
   if(currentEditingCommentId === commentId) return;
   
-  // Cancel any other edits
   if(currentEditingCommentId) {
     const prevEditForm = document.getElementById(`edit-form-${currentEditingCommentId}`);
     if(prevEditForm) prevEditForm.remove();
@@ -1384,7 +1465,6 @@ window.editComment = async function(commentId) {
   
   currentEditingCommentId = commentId;
   
-  // Create edit form
   const editForm = document.createElement('div');
   editForm.id = `edit-form-${commentId}`;
   editForm.className = 'relife-edit-comment-form';
@@ -1400,16 +1480,13 @@ window.editComment = async function(commentId) {
     </div>
   `;
   
-  // Insert after comment text
   const commentText = commentEl.querySelector('.relife-comment-text');
   commentText.after(editForm);
   
-  // Focus textarea
   const textarea = document.getElementById(`edit-textarea-${commentId}`);
   textarea.focus();
   textarea.setSelectionRange(textarea.value.length, textarea.value.length);
   
-  // Setup mention autocomplete
   setupMentionAutocomplete(textarea);
 };
 
@@ -1420,6 +1497,8 @@ window.cancelEdit = function(commentId) {
 };
 
 window.saveEdit = async function(commentId) {
+  if(isNotification) return;
+  
   const textarea = document.getElementById(`edit-textarea-${commentId}`);
   const newText = textarea.value.trim();
   
@@ -1429,19 +1508,16 @@ window.saveEdit = async function(commentId) {
   }
   
   try {
-    // Extract mentions
     const mentions = extractMentions(newText);
     const mentionedUserIds = await resolveMentions(mentions);
     
-    // Update Firestore
-    await updateDoc(doc(db, 'posts', postId, 'comments', commentId), {
+    await updateDoc(doc(db, 'posts', contentId, 'comments', commentId), {
       text: newText,
       mentions: mentionedUserIds,
       editedAt: serverTimestamp(),
       editCount: increment(1)
     });
     
-    // Remove edit form
     window.cancelEdit(commentId);
     
     console.log('Comment updated successfully');
@@ -1461,7 +1537,7 @@ function extractMentions(text) {
   while((match = mentionRegex.exec(text)) !== null) {
     mentions.push('@' + match[1]);
   }
-  return [...new Set(mentions)]; // Unique
+  return [...new Set(mentions)];
 }
 
 /**
@@ -1499,7 +1575,6 @@ function setupMentionAutocomplete(textarea) {
     const text = textarea.value;
     const cursorPos = textarea.selectionStart;
     
-    // Find @ before cursor
     const textBeforeCursor = text.substring(0, cursorPos);
     const lastAtPos = textBeforeCursor.lastIndexOf('@');
     
@@ -1510,7 +1585,6 @@ function setupMentionAutocomplete(textarea) {
     
     const queryText = textBeforeCursor.substring(lastAtPos + 1);
     
-    // Check if query is valid (no spaces)
     if(queryText.includes(' ')) {
       dropdown.classList.remove('show');
       return;
@@ -1518,7 +1592,6 @@ function setupMentionAutocomplete(textarea) {
     
     currentQuery = queryText.toLowerCase();
     
-    // Search users
     if(currentQuery.length >= 2) {
       await searchUsersForMention(currentQuery, dropdown, textarea, lastAtPos);
     } else {
@@ -1526,7 +1599,6 @@ function setupMentionAutocomplete(textarea) {
     }
   });
   
-  // Close dropdown on blur
   textarea.addEventListener('blur', () => {
     setTimeout(() => dropdown.classList.remove('show'), 200);
   });
@@ -1559,7 +1631,6 @@ async function searchUsersForMention(query, dropdown, textarea, atPos) {
       return;
     }
     
-    // Render matches
     dropdown.innerHTML = matches.slice(0, 5).map(user => {
       const avatar = user.avatarUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.displayName)}&background=0D6EFD&color=fff&size=64`;
       return `
@@ -1571,14 +1642,12 @@ async function searchUsersForMention(query, dropdown, textarea, atPos) {
       `;
     }).join('');
     
-    // Position dropdown
     const rect = textarea.getBoundingClientRect();
     dropdown.style.left = rect.left + 'px';
     dropdown.style.top = (rect.bottom + 5) + 'px';
     dropdown.style.width = Math.min(rect.width, 300) + 'px';
     dropdown.classList.add('show');
     
-    // Add click handlers
     dropdown.querySelectorAll('.relife-mention-item').forEach(item => {
       item.addEventListener('click', () => {
         const tagName = item.getAttribute('data-tagname');
@@ -1597,11 +1666,13 @@ async function searchUsersForMention(query, dropdown, textarea, atPos) {
 }
 
 /**
- * Report comment - ✅ FIXED VERSION
+ * Report comment
  */
 let currentReportCommentId = null;
 
 window.openReportModal = function(commentId) {
+  if(isNotification) return;
+  
   currentReportCommentId = commentId;
   document.getElementById('reportOverlay').classList.add('show');
   document.getElementById('reportModal').classList.add('show');
@@ -1614,6 +1685,7 @@ window.closeReportModal = function() {
 };
 
 window.submitReport = async function() {
+  if(isNotification) return;
   if(!currentReportCommentId) return;
   
   const user = auth.currentUser;
@@ -1622,16 +1694,12 @@ window.submitReport = async function() {
     return;
   }
   
-  // Get selected reason
   const reasonRadio = document.querySelector('input[name="reportReason"]:checked');
   let reason = reasonRadio ? reasonRadio.value : 'other';
-  
-  // 💡 Đảm bảo giá trị reason là chữ thường để khớp với Rules (dù HTML bạn đã đúng)
-  reason = reason.toLowerCase(); 
+  reason = reason.toLowerCase();
 
   try {
-    // Check if already reported (GET operation does not require special rules)
-    const reportRef = doc(db, 'posts', postId, 'comments', currentReportCommentId, 'reports', user.uid);
+    const reportRef = doc(db, 'posts', contentId, 'comments', currentReportCommentId, 'reports', user.uid);
     const reportDoc = await getDoc(reportRef);
     
     if(reportDoc.exists()) {
@@ -1640,22 +1708,18 @@ window.submitReport = async function() {
       return;
     }
     
-    // ✅ FIX: Use batch for atomic writes
     const batch = writeBatch(db);
     
-    // 1. Create Report Document (MUST use doc(user.uid) to match Rules)
     batch.set(reportRef, {
       userId: user.uid,
       reason: reason,
       createdAt: serverTimestamp()
     });
     
-    // 2. Increment reportCount on Comment
-    // ⚠️ CHỈNH SỬA TẠI ĐÂY: Dùng batch.set({...}, {merge: true}) để đảm bảo Rules chấp nhận
-    const commentRef = doc(db, 'posts', postId, 'comments', currentReportCommentId);
+    const commentRef = doc(db, 'posts', contentId, 'comments', currentReportCommentId);
     batch.set(commentRef, { 
       reportCount: increment(1) 
-    }, { merge: true }); // <--- Đây là mấu chốt
+    }, { merge: true });
     
     await batch.commit();
     
@@ -1668,7 +1732,4 @@ window.submitReport = async function() {
   }
 };
 
-
-
-// Close report modal on overlay click
 document.getElementById('reportOverlay').addEventListener('click', window.closeReportModal);
