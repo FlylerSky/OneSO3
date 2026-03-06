@@ -1,0 +1,5 @@
+[ File ghi chú update, bắt đầu sử dụng từ Relife 5 ]
+//Vui lòng append vào cuối file nếu có phiên bản mới hoặc ghi chú mới//
+----------------
+r5.X.426/
+Nội dung update: #

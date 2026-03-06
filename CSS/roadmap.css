@@ -1,0 +1,853 @@
+/* ============================================
+   RELIFE — TRANG TIẾN TRÌNH (ROADMAP)
+   Liquid Glass Design — Consistent with Relife UI
+   ============================================ */
+
+@font-face {
+  font-family: 'One OS UI 1';
+  src: url('../SVN-Agency FB bold.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+}
+
+:root {
+  --glass-bg: rgba(255, 255, 255, 0.72);
+  --glass-border: rgba(255, 255, 255, 0.25);
+  --glass-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.12);
+  --blur-amount: 20px;
+
+  --liquid-primary: #007AFF;
+  --liquid-secondary: #5856D6;
+  --liquid-accent: #FF2D55;
+  --liquid-success: #34C759;
+  --liquid-warning: #FF9500;
+  --liquid-danger: #FF3B30;
+
+  --text-primary: #1d1d1f;
+  --text-secondary: #86868b;
+  --text-tertiary: #6e6e73;
+
+  --spacing-xs: 4px;
+  --spacing-sm: 8px;
+  --spacing-md: 16px;
+  --spacing-lg: 24px;
+  --spacing-xl: 32px;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  font-family: "One OS UI 1", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+  background: #f0f2f8;
+  color: var(--text-primary);
+  overflow-x: hidden;
+  min-height: 100vh;
+  line-height: 1.6;
+}
+
+/* ============================================
+   BACKGROUND
+   ============================================ */
+.relife-bg {
+  position: fixed;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  z-index: -1;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.relife-gradient {
+  position: absolute;
+  top: -50%; left: -50%;
+  width: 200%; height: 200%;
+  background: linear-gradient(
+    135deg,
+    rgba(0, 122, 255, 0.08) 0%,
+    rgba(88, 86, 214, 0.06) 30%,
+    rgba(52, 199, 89, 0.05) 60%,
+    rgba(0, 122, 255, 0.08) 100%
+  );
+  animation: gradientRotate 25s ease infinite;
+}
+
+@keyframes gradientRotate {
+  0%, 100% { transform: rotate(0deg); }
+  50% { transform: rotate(180deg); }
+}
+
+.relife-orb {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(80px);
+  opacity: 0.4;
+  animation: orbFloat 18s ease-in-out infinite;
+}
+
+.relife-orb-1 {
+  width: 500px; height: 500px;
+  background: radial-gradient(circle, rgba(0, 122, 255, 0.35) 0%, transparent 70%);
+  top: -10%; left: -5%;
+  animation-delay: 0s;
+}
+
+.relife-orb-2 {
+  width: 400px; height: 400px;
+  background: radial-gradient(circle, rgba(88, 86, 214, 0.3) 0%, transparent 70%);
+  top: 40%; right: -10%;
+  animation-delay: -6s;
+}
+
+.relife-orb-3 {
+  width: 300px; height: 300px;
+  background: radial-gradient(circle, rgba(52, 199, 89, 0.25) 0%, transparent 70%);
+  bottom: 10%; left: 20%;
+  animation-delay: -12s;
+}
+
+@keyframes orbFloat {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  33% { transform: translate(40px, -30px) scale(1.05); }
+  66% { transform: translate(-20px, 20px) scale(0.97); }
+}
+
+/* ============================================
+   NAVBAR
+   ============================================ */
+.navbar {
+  position: sticky;
+  top: 0;
+  z-index: 1000;
+  background: rgba(255,255,255,0.9) !important;
+  backdrop-filter: blur(16px);
+  border-bottom: 1px solid rgba(0,0,0,0.06);
+}
+
+.roadmap-nav-title {
+  font-weight: 700;
+  font-size: 0.95rem;
+  color: var(--liquid-primary);
+  background: rgba(0, 122, 255, 0.08);
+  padding: 6px 14px;
+  border-radius: 999px;
+}
+
+/* ============================================
+   CONTAINER
+   ============================================ */
+.container-main {
+  max-width: 860px;
+  margin: 0 auto;
+  padding: var(--spacing-lg);
+}
+
+/* ============================================
+   GLASS CARD
+   ============================================ */
+.glass-card {
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--blur-amount)) saturate(180%);
+  -webkit-backdrop-filter: blur(var(--blur-amount)) saturate(180%);
+  border: 1px solid var(--glass-border);
+  border-radius: 24px;
+  box-shadow: var(--glass-shadow);
+}
+
+/* ============================================
+   HERO — COUNTDOWN
+   ============================================ */
+.roadmap-hero {
+  padding: var(--spacing-xl) var(--spacing-xl);
+  margin-bottom: var(--spacing-lg);
+  text-align: center;
+  position: relative;
+  overflow: hidden;
+  animation: fadeInUp 0.6s ease;
+}
+
+.roadmap-hero::before {
+  content: '';
+  position: absolute;
+  top: -60%; left: -20%;
+  width: 140%; height: 200%;
+  background: radial-gradient(circle at 50% 40%, rgba(0,122,255,0.07) 0%, transparent 60%);
+  pointer-events: none;
+}
+
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(24px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.roadmap-hero-label {
+  font-size: 0.85rem;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--liquid-primary);
+  opacity: 0.8;
+  margin-bottom: 6px;
+}
+
+.roadmap-hero-version {
+  font-size: 3rem;
+  font-weight: 900;
+  color: var(--text-primary);
+  line-height: 1;
+  margin-bottom: 8px;
+  background: linear-gradient(135deg, #007AFF, #5856D6);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.roadmap-hero-subtitle {
+  color: var(--text-secondary);
+  font-size: 0.95rem;
+  margin-bottom: var(--spacing-xl);
+}
+
+/* Countdown */
+.countdown-grid {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-sm);
+  margin-bottom: var(--spacing-xl);
+  flex-wrap: wrap;
+}
+
+.countdown-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background: rgba(0, 122, 255, 0.07);
+  border: 1px solid rgba(0, 122, 255, 0.15);
+  border-radius: 16px;
+  padding: 16px 20px;
+  min-width: 80px;
+}
+
+.countdown-value {
+  font-size: 2.2rem;
+  font-weight: 900;
+  color: var(--liquid-primary);
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  transition: transform 0.2s ease;
+}
+
+.countdown-value.tick {
+  transform: scale(1.12);
+}
+
+.countdown-label {
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  margin-top: 4px;
+}
+
+.countdown-sep {
+  font-size: 2rem;
+  font-weight: 900;
+  color: var(--liquid-primary);
+  opacity: 0.4;
+  margin-bottom: 16px;
+  animation: blink 1s ease-in-out infinite;
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 0.1; }
+}
+
+/* Progress bar */
+.cycle-progress-wrap {
+  margin-bottom: var(--spacing-lg);
+  padding: 0 8px;
+}
+
+.cycle-progress-labels {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+.cycle-progress-center-label {
+  font-size: 0.75rem;
+  color: var(--liquid-primary);
+  font-weight: 700;
+}
+
+.cycle-progress-bar-track {
+  height: 10px;
+  background: rgba(0, 122, 255, 0.1);
+  border-radius: 999px;
+  position: relative;
+  overflow: visible;
+}
+
+.cycle-progress-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #007AFF, #5856D6);
+  border-radius: 999px;
+  transition: width 1s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+}
+
+.cycle-progress-dot {
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 18px;
+  height: 18px;
+  background: white;
+  border: 3px solid var(--liquid-primary);
+  border-radius: 50%;
+  box-shadow: 0 2px 8px rgba(0, 122, 255, 0.4);
+  transition: left 1s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.cycle-progress-percent {
+  text-align: center;
+  margin-top: 10px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--liquid-primary);
+}
+
+/* Status badge */
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 8px 20px;
+  border-radius: 999px;
+  font-size: 0.875rem;
+  font-weight: 700;
+  border: 1px solid transparent;
+}
+
+.status-badge.developing {
+  background: rgba(52, 199, 89, 0.12);
+  color: var(--liquid-success);
+  border-color: rgba(52, 199, 89, 0.25);
+}
+
+.status-badge.testing {
+  background: rgba(255, 149, 0, 0.12);
+  color: var(--liquid-warning);
+  border-color: rgba(255, 149, 0, 0.25);
+}
+
+.status-badge.maintenance {
+  background: rgba(255, 59, 48, 0.12);
+  color: var(--liquid-danger);
+  border-color: rgba(255, 59, 48, 0.25);
+}
+
+.status-badge.released {
+  background: rgba(0, 122, 255, 0.12);
+  color: var(--liquid-primary);
+  border-color: rgba(0, 122, 255, 0.25);
+}
+
+/* ============================================
+   SECTION TITLE
+   ============================================ */
+.section-title {
+  font-size: 1.1rem;
+  font-weight: 800;
+  color: var(--text-primary);
+  margin: var(--spacing-xl) 0 var(--spacing-md);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* ============================================
+   TIMELINE GRID
+   ============================================ */
+.timeline-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: var(--spacing-md);
+  margin-bottom: var(--spacing-xl);
+}
+
+.timeline-card {
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--blur-amount)) saturate(160%);
+  border: 1px solid var(--glass-border);
+  border-radius: 20px;
+  padding: var(--spacing-lg);
+  box-shadow: var(--glass-shadow);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  overflow: hidden;
+  animation: fadeInUp 0.5s ease both;
+}
+
+.timeline-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 16px 40px rgba(31, 38, 135, 0.15);
+}
+
+.timeline-card.current {
+  border-color: rgba(0, 122, 255, 0.4);
+  background: rgba(0, 122, 255, 0.05);
+}
+
+.timeline-card.current::after {
+  content: 'Hiện tại';
+  position: absolute;
+  top: 12px; right: 12px;
+  background: var(--liquid-primary);
+  color: white;
+  font-size: 0.65rem;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  padding: 3px 10px;
+  border-radius: 999px;
+}
+
+.timeline-card.done {
+  opacity: 0.65;
+}
+
+.timeline-card.maintenance-mode {
+  border-color: rgba(255, 149, 0, 0.4);
+  background: rgba(255, 149, 0, 0.05);
+}
+
+.timeline-card.maintenance-mode::after {
+  content: 'Bảo trì';
+  position: absolute;
+  top: 12px; right: 12px;
+  background: var(--liquid-warning);
+  color: white;
+  font-size: 0.65rem;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  padding: 3px 10px;
+  border-radius: 999px;
+}
+
+.timeline-card-top {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.timeline-icon {
+  width: 44px; height: 44px;
+  border-radius: 14px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1.3rem;
+  flex-shrink: 0;
+}
+
+.timeline-icon.done-icon   { background: rgba(52, 199, 89, 0.12); color: var(--liquid-success); }
+.timeline-icon.current-icon { background: rgba(0, 122, 255, 0.12); color: var(--liquid-primary); }
+.timeline-icon.future-icon { background: rgba(142, 142, 147, 0.12); color: #8e8e93; }
+.timeline-icon.maint-icon  { background: rgba(255, 149, 0, 0.12); color: var(--liquid-warning); }
+
+.timeline-card-info {}
+.timeline-version { font-weight: 800; font-size: 1.05rem; color: var(--text-primary); }
+.timeline-date    { font-size: 0.82rem; color: var(--text-secondary); margin-top: 2px; }
+
+.timeline-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 999px;
+  margin-top: 10px;
+}
+
+.timeline-status.st-done { background: rgba(52, 199, 89, 0.12); color: var(--liquid-success); }
+.timeline-status.st-current { background: rgba(0, 122, 255, 0.12); color: var(--liquid-primary); }
+.timeline-status.st-future { background: rgba(142, 142, 147, 0.1); color: #8e8e93; }
+.timeline-status.st-maint { background: rgba(255, 149, 0, 0.12); color: var(--liquid-warning); }
+
+.timeline-daysago {
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  margin-top: 6px;
+}
+
+/* ============================================
+   CYCLE EXPLANATION
+   ============================================ */
+.cycle-explain {
+  padding: var(--spacing-lg) var(--spacing-xl);
+  margin-bottom: var(--spacing-xl);
+  animation: fadeInUp 0.7s ease both;
+}
+
+.cycle-explain-title {
+  font-size: 1rem;
+  font-weight: 800;
+  color: var(--text-primary);
+  margin-bottom: var(--spacing-lg);
+}
+
+.cycle-explain-steps {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+  flex-wrap: wrap;
+}
+
+.cycle-step {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  flex: 1;
+  min-width: 160px;
+}
+
+.cycle-step-icon {
+  width: 44px; height: 44px;
+  border-radius: 14px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1.2rem;
+  flex-shrink: 0;
+}
+
+.cycle-step-title {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 2px;
+}
+
+.cycle-step-desc {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.cycle-step-arrow {
+  color: var(--text-secondary);
+  font-size: 1.2rem;
+  opacity: 0.4;
+  flex-shrink: 0;
+  align-self: center;
+}
+
+/* ============================================
+   LEAKS SECTION
+   ============================================ */
+.btn-admin-add {
+  margin-left: auto;
+  background: linear-gradient(135deg, rgba(255,149,0,0.15), rgba(255,59,48,0.12));
+  border: 1px solid rgba(255, 149, 0, 0.3);
+  color: var(--liquid-warning);
+  font-size: 0.82rem;
+  font-weight: 700;
+  padding: 5px 14px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+}
+
+.btn-admin-add:hover {
+  background: linear-gradient(135deg, rgba(255,149,0,0.25), rgba(255,59,48,0.2));
+  transform: scale(1.03);
+}
+
+.leaks-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+  margin-bottom: var(--spacing-xl);
+}
+
+.leaks-empty {
+  text-align: center;
+  padding: 3rem 2rem;
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--blur-amount));
+  border: 1px solid var(--glass-border);
+  border-radius: 20px;
+  color: var(--text-secondary);
+}
+
+.leak-card {
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--blur-amount)) saturate(180%);
+  border: 1px solid var(--glass-border);
+  border-radius: 20px;
+  padding: var(--spacing-lg);
+  box-shadow: var(--glass-shadow);
+  transition: all 0.3s ease;
+  position: relative;
+  overflow: hidden;
+  animation: fadeInUp 0.5s ease both;
+}
+
+.leak-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 12px 36px rgba(31, 38, 135, 0.15);
+}
+
+.leak-card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0;
+  width: 4px; height: 100%;
+  border-radius: 4px 0 0 4px;
+}
+
+.leak-card.level-hint::before   { background: rgba(88, 86, 214, 0.6); }
+.leak-card.level-partial::before { background: rgba(255, 149, 0, 0.7); }
+.leak-card.level-major::before  { background: rgba(255, 59, 48, 0.8); }
+
+.leak-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.leak-title {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.leak-level-badge {
+  font-size: 0.7rem;
+  font-weight: 800;
+  padding: 3px 10px;
+  border-radius: 999px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.leak-level-badge.hint    { background: rgba(88, 86, 214, 0.1); color: var(--liquid-secondary); }
+.leak-level-badge.partial { background: rgba(255, 149, 0, 0.1); color: var(--liquid-warning); }
+.leak-level-badge.major   { background: rgba(255, 59, 48, 0.1); color: var(--liquid-danger); }
+
+.leak-meta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+
+.leak-content {
+  font-size: 0.93rem;
+  color: var(--text-primary);
+  line-height: 1.7;
+}
+
+.leak-content p { margin-bottom: 0.75rem; }
+
+.leak-admin-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.btn-leak-delete {
+  background: rgba(255, 59, 48, 0.1);
+  border: 1px solid rgba(255, 59, 48, 0.2);
+  color: var(--liquid-danger);
+  font-size: 0.78rem;
+  font-weight: 600;
+  padding: 4px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-leak-delete:hover {
+  background: rgba(255, 59, 48, 0.2);
+}
+
+/* ============================================
+   LOGIN NOTICE
+   ============================================ */
+.login-notice {
+  padding: var(--spacing-lg);
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+  margin-bottom: var(--spacing-xl);
+}
+
+/* ============================================
+   QUILL EDITOR
+   ============================================ */
+.ql-toolbar { border-radius: 10px 10px 0 0 !important; border-color: #dee2e6 !important; }
+.ql-container { border-radius: 0 0 10px 10px !important; border-color: #dee2e6 !important; font-size: 0.95rem; }
+
+/* ============================================
+   RESPONSIVE
+   ============================================ */
+@media (max-width: 600px) {
+  .container-main { padding: var(--spacing-md); }
+  .roadmap-hero { padding: var(--spacing-lg) var(--spacing-md); }
+  .roadmap-hero-version { font-size: 2.2rem; }
+  .countdown-item { min-width: 64px; padding: 12px 14px; }
+  .countdown-value { font-size: 1.8rem; }
+  .cycle-explain-steps { flex-direction: column; gap: var(--spacing-md); }
+  .cycle-step-arrow { transform: rotate(90deg); align-self: flex-start; margin-left: 22px; }
+  .timeline-grid { grid-template-columns: 1fr; }
+}
+
+/* ============================================
+   HERO — VERSION CODE
+   ============================================ */
+.roadmap-hero-version-code {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--text-secondary);
+  font-family: 'Courier New', monospace;
+  background: rgba(0, 122, 255, 0.08);
+  border: 1px solid rgba(0, 122, 255, 0.15);
+  display: inline-block;
+  padding: 4px 14px;
+  border-radius: 999px;
+  margin-bottom: 8px;
+  letter-spacing: 0.5px;
+}
+
+/* ============================================
+   TIMELINE — VERSION CODE
+   ============================================ */
+.timeline-version-code {
+  font-size: 0.75rem;
+  font-family: 'Courier New', monospace;
+  color: var(--liquid-primary);
+  background: rgba(0, 122, 255, 0.07);
+  padding: 2px 8px;
+  border-radius: 6px;
+  display: inline-block;
+  margin: 3px 0 2px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+}
+
+/* ============================================
+   CURRENT VERSION PANEL
+   ============================================ */
+.current-version-panel {
+  padding: var(--spacing-lg) var(--spacing-xl);
+  margin-bottom: var(--spacing-lg);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border-left: 4px solid var(--liquid-primary);
+  animation: fadeInUp 0.65s ease both;
+}
+
+.cv-label {
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  color: var(--liquid-primary);
+  opacity: 0.8;
+}
+
+.cv-name {
+  font-size: 1.5rem;
+  font-weight: 900;
+  color: var(--text-primary);
+  background: linear-gradient(135deg, #007AFF, #5856D6);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.cv-code {
+  font-size: 1rem;
+  font-family: 'Courier New', monospace;
+  font-weight: 700;
+  color: var(--liquid-secondary);
+  background: rgba(88, 86, 214, 0.08);
+  display: inline-block;
+  padding: 3px 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(88, 86, 214, 0.2);
+  width: fit-content;
+}
+
+.cv-date {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+}
+
+.cv-note {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  background: rgba(0, 122, 255, 0.04);
+  border: 1px solid rgba(0, 122, 255, 0.1);
+  border-radius: 10px;
+  padding: 8px 12px;
+  margin-top: 4px;
+  line-height: 1.6;
+}
+
+/* Naming guide popup-style block inside cycle-explain */
+.naming-guide {
+  margin-top: var(--spacing-lg);
+  padding-top: var(--spacing-lg);
+  border-top: 1px solid rgba(142, 142, 147, 0.15);
+}
+
+.naming-guide-title {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 10px;
+}
+
+.naming-guide-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  margin-bottom: 6px;
+}
+
+.naming-token {
+  font-family: 'Courier New', monospace;
+  font-weight: 700;
+  font-size: 0.85rem;
+  background: rgba(0, 122, 255, 0.1);
+  color: var(--liquid-primary);
+  padding: 2px 8px;
+  border-radius: 6px;
+  white-space: nowrap;
+}
+
+.naming-desc {
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}

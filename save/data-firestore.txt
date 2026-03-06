@@ -1,0 +1,226 @@
+# Firestore data structure (One Social)
+# File: data-firestore
+# Mục đích: liệt kê các collection / document và các trường (fields) đang sử dụng trong One Social.
+# Lưu ý: kiểu dữ liệu chỉ mang tính tham khảo theo cách ứng dụng sử dụng (string, int, timestamp, array, boolean, map).
+# Các ràng buộc về quyền truy cập (read/write/create/update/delete) và giá trị trường được kiểm soát chặt chẽ bởi Firebase Security Rules.
+
+------------------------------------------------------------
+Collection: config
+Document ID: {docId} (tên tài liệu tùy ý)
+Fields: (Không định nghĩa rõ ràng trong rules, thường là các cặp key-value để cấu hình)
+  - (Các trường dữ liệu cấu hình)
+
+Quyền truy cập:
+  - read: Mọi người đều có thể đọc.
+  - write (create/update/delete): Chỉ admin (người dùng có trường 'type' là 'admin' trong collection 'users') mới có quyền ghi.
+
+------------------------------------------------------------
+Collection: system
+Document ID: {docId} (tên tài liệu tùy ý)
+Fields: (Không định nghĩa rõ ràng trong rules, thường là các cặp key-value cho thông tin hệ thống)
+  - (Các trường dữ liệu hệ thống)
+
+Quyền truy cập:
+  - read: Mọi người đều có thể đọc.
+  - write (create/update/delete): Chỉ admin mới có quyền ghi.
+
+------------------------------------------------------------
+Collection: roadmap_leaks
+Document ID: {id}
+Fields: (Không định nghĩa rõ ràng trong rules)
+  - (Các trường liên quan đến rò rỉ lộ trình phát triển)
+
+Quyền truy cập:
+  - read: Mọi người đều có thể đọc.
+  - write (create/update/delete): Chỉ admin mới có quyền ghi.
+
+------------------------------------------------------------
+Collection: posts
+Document ID: {postId}
+Fields:
+  - title: string
+  - content: string        // HTML sinh ra từ Quill (có thể chứa <p>, <ol>, <ul>, <img>, <iframe>, ...)
+  - displayName: string    // Tên hiển thị của tác giả tại thời điểm đăng
+  - authorTag: string|null // tagName của tác giả (vd: "@lan123"), có thể null
+  - userId: string         // UID của tác giả (Firestore Auth UID)
+  - likes: int             // Tổng số lượt like (default 0)
+  - dislikes: int          // Tổng số lượt dislike (default 0)
+  - commentsCount: int     // Tổng số bình luận (default 0)
+  - hashtags: array<string>// Mảng hashtag (vd: ["#game","#news"])
+  - createdAt: timestamp   // serverTimestamp() khi tạo
+  - updatedAt: timestamp?  // optional, serverTimestamp() khi chỉnh sửa
+
+Quyền truy cập:
+  - read: Mọi người đều có thể đọc.
+  - create:
+    - Yêu cầu `createdAt` phải là `request.time`.
+    - `likes`, `dislikes`, `commentsCount` phải bằng `0` khi tạo.
+    - `userId` phải trùng với `request.auth.uid` nếu người dùng đã xác thực. (Hoặc cho phép tạo ẩn danh nếu `request.auth == null`).
+  - delete: Chỉ chủ sở hữu bài đăng (`resource.data.userId == request.auth.uid`) và người dùng đã xác thực mới có quyền xóa.
+  - update:
+    - Chủ sở hữu bài đăng (`resource.data.userId == request.auth.uid`) và người dùng đã xác thực có thể cập nhật các trường, nhưng không được phép thay đổi `createdAt` và `userId`. Các trường `likes`, `dislikes`, `commentsCount` cũng không được phép thay đổi trực tiếp bởi chủ sở hữu.
+    - Bất kỳ người dùng đã xác thực nào cũng có thể tăng/giảm `likes`, `dislikes`, `commentsCount` bằng `±1` so với giá trị hiện tại.
+
+Subcollections under posts:
+  posts/{postId}/comments
+    Document ID: {commentId}
+    Fields:
+      - userId: string        // UID của người bình luận
+      - displayName: string  // Tên hiển thị của người bình luận
+      - text: string         // Nội dung bình luận (plain text)
+      - createdAt: timestamp // serverTimestamp()
+      - mentions: array<string|map>? // optional, các đối tượng được @mention trong bình luận
+      - editedAt: timestamp?  // optional, serverTimestamp() khi chỉnh sửa
+      - editCount: int?       // optional, số lần chỉnh sửa bình luận
+      - reportCount: int?     // optional, số lượt báo cáo
+
+    Quyền truy cập:
+      - read: Mọi người đều có thể đọc.
+      - create:
+        - Yêu cầu người dùng đã xác thực.
+        - `userId` phải trùng với `request.auth.uid`.
+        - `displayName` và `text` phải là `string`.
+        - `createdAt` phải là `request.time`.
+      - update:
+        - Chủ sở hữu bình luận (`resource.data.userId == request.auth.uid`) và người dùng đã xác thực có thể cập nhật `text`, `mentions`, `editedAt`, `editCount`.
+        - Chủ sở hữu bình luận (`resource.data.userId == request.auth.uid`) và người dùng đã xác thực cũng có thể cập nhật `displayName` (phải là `string`).
+        - Bất kỳ người dùng đã xác thực nào cũng có thể tăng `reportCount` lên `+1` (hoặc đặt là `1` nếu chưa tồn tại).
+      - delete: Chỉ chủ sở hữu bình luận (`resource.data.userId == request.auth.uid`) hoặc chủ sở hữu bình luận cha (nếu là bình luận trả lời và có trường `replyTo`) và người dùng đã xác thực mới có quyền xóa.
+
+    Subcollection under comments:
+      posts/{postId}/comments/{commentId}/reports
+        Document ID: {reporterId} // UID của người dùng thực hiện báo cáo
+        Fields:
+          - userId: string        // UID của người dùng đã báo cáo (trùng với {reporterId})
+          - reason: string        // Lý do báo cáo (phải là 'spam', 'offensive', 'inappropriate', hoặc 'other')
+          - createdAt: timestamp  // serverTimestamp() khi tạo báo cáo
+
+        Quyền truy cập:
+          - read: Chỉ người dùng đã xác thực và có UID trùng với `reporterId` mới có thể đọc báo cáo của mình.
+          - create:
+            - Yêu cầu người dùng đã xác thực.
+            - `reporterId` phải trùng với `request.auth.uid`.
+            - `userId` phải trùng với `request.auth.uid`.
+            - `reason` phải là `string` và nằm trong danh sách cho phép (`'spam','offensive','inappropriate','other'`).
+          - update, delete: Không được phép.
+
+  posts/{postId}/likes
+    Document ID: {likeId}    // Thường dùng UID của user làm id
+    Fields:
+      - userId: string        // UID của người dùng tương tác
+      - type: string          // 'like' hoặc 'dislike'
+      - createdAt: timestamp  // serverTimestamp()
+      - updatedAt: timestamp? // Khi đổi type (like <-> dislike)
+
+    Quyền truy cập:
+      - read: Mọi người đều có thể đọc.
+      - create:
+        - Yêu cầu người dùng đã xác thực.
+        - `likeId` phải trùng với `request.auth.uid`.
+        - `userId` phải trùng với `request.auth.uid`.
+        - `type` phải là 'like' hoặc 'dislike'.
+        - `createdAt` phải là `request.time`.
+      - update:
+        - Yêu cầu người dùng đã xác thực.
+        - `likeId` phải trùng với `request.auth.uid`.
+        - `userId` phải trùng với `request.auth.uid`.
+        - `type` phải là 'like' hoặc 'dislike'.
+      - delete: Chỉ người dùng đã xác thực và có UID trùng với `likeId` mới có quyền xóa.
+
+------------------------------------------------------------
+Collection: users
+Document ID: {userId}
+Fields:
+  - email: string           // Phải trùng với email của người dùng xác thực khi tạo.
+  - displayName: string
+  - tagName: string|null       // Tag Name Search (unique, dạng "@name")
+  - avatarUrl: string|null
+  - bio: string|null
+  - gender: string|null
+  - birthday: string|null      // Định dạng hiển thị (vd: "YYYY-MM-DD" hoặc text)
+  - country: string|null
+  - activated: boolean         // Trạng thái kích hoạt tài khoản
+  - activationCode: string?    // (admin thêm thủ công) dùng cho lần kích hoạt đầu
+  - followersCount: int?       // (optional) Có thể không tồn tại.
+  - followingCount: int?       // (optional)
+  - createdAt: timestamp
+  - updatedAt: timestamp?
+  - type: string?              // Chỉ có admin mới có thể thiết lập/thay đổi trường này.
+
+Quyền truy cập:
+  - read: Mọi người đều có thể đọc.
+  - create:
+    - Yêu cầu người dùng đã xác thực.
+    - `userId` phải trùng với `request.auth.uid`.
+    - `email` phải trùng với `request.auth.token.email`.
+    - Không được phép tạo tài liệu với trường `type`.
+  - update:
+    - Chủ sở hữu tài khoản (`request.auth.uid == userId`) và người dùng đã xác thực có thể cập nhật các trường, nhưng không được phép thay đổi trường `type`.
+    - Bất kỳ người dùng đã xác thực nào cũng có thể tăng/giảm `followersCount` và `followingCount` bằng `±1` (hoặc đặt là `1` nếu chưa tồn tại).
+  - delete: Chỉ chủ sở hữu tài khoản (`request.auth.uid == userId`) và người dùng đã xác thực mới có quyền xóa.
+
+Subcollections under users:
+  users/{userId}/searchHistory
+    Document ID: {doc}
+    Fields: (Không định nghĩa rõ ràng trong rules, thường là các mục lịch sử tìm kiếm)
+      - (Các trường dữ liệu lịch sử tìm kiếm)
+
+    Quyền truy cập:
+      - read, write (create/update/delete): Chỉ chủ sở hữu tài khoản (`request.auth.uid == userId`) và người dùng đã xác thực mới có quyền đọc/ghi.
+
+  users/{userId}/followers
+    Document ID: {followerId}  // UID của follower
+    Fields:
+      - userId: string         // UID của follower (trùng với {followerId} và `request.auth.uid`)
+      - createdAt: timestamp   // serverTimestamp()
+      - displayName: string?   // snapshot tên/ảnh của follower tại thời điểm follow
+      - avatarUrl: string?     // optional
+      - tagName: string?       // optional
+
+    Quyền truy cập:
+      - read: Mọi người đều có thể đọc.
+      - create:
+        - Yêu cầu người dùng đã xác thực.
+        - `followerId` phải trùng với `request.auth.uid`.
+        - `userId` trong tài liệu phải trùng với `request.auth.uid`.
+        - `createdAt` phải là `request.time`.
+      - update: Không được phép.
+      - delete: Chỉ người dùng đã xác thực và có UID trùng với `followerId` mới có quyền xóa.
+
+  users/{userId}/following
+    Document ID: {followingId} // UID của người được follow
+    Fields:
+      - userId: string         // UID của người được follow (trùng với {followingId})
+      - createdAt: timestamp   // serverTimestamp()
+      - displayName: string?   // optional snapshot
+      - avatarUrl: string?     // optional
+
+    Quyền truy cập:
+      - read: Mọi người đều có thể đọc.
+      - create:
+        - Yêu cầu người dùng đã xác thực.
+        - `userId` trong đường dẫn phải trùng với `request.auth.uid`.
+        - `userId` trong tài liệu phải trùng với `followingId`.
+        - `createdAt` phải là `request.time`.
+      - update: Không được phép.
+      - delete: Chỉ người dùng đã xác thực và có UID trùng với `userId` trong đường dẫn mới có quyền xóa.
+
+  users/{userId}/visitors
+    Document ID: {visitorId}  // UID của visitor (người ghé thăm)
+    Fields:
+      - userId: string         // UID của visitor (trùng với {visitorId} và `request.auth.uid`)
+      - displayName: string?   // Tên hiển thị nếu có (lấy từ users/{visitorId} khi lưu)
+      - tagName: string?       // tagName nếu có
+      - avatarUrl: string?     // avatar snapshot hoặc photoURL
+      - lastVisitedAt: timestamp // serverTimestamp() khi ghé thăm/cập nhật
+
+    Quyền truy cập:
+      - read: Chỉ chủ sở hữu tài khoản (`request.auth.uid == userId`) mới có thể đọc danh sách khách truy cập của mình.
+      - create, update:
+        - Yêu cầu người dùng đã xác thực.
+        - `visitorId` phải trùng với `request.auth.uid`.
+        - `userId` trong tài liệu phải trùng với `request.auth.uid`.
+        - `lastVisitedAt` phải là `request.time`.
+      - delete: Chỉ người dùng đã xác thực và có UID trùng với `userId` (chủ sở hữu tài khoản) hoặc `visitorId` (khách truy cập) mới có quyền xóa.
+
+--------------------------------No response

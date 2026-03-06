@@ -1,0 +1,327 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Relife — Cài đặt Admin</title>
+
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+
+<link rel="stylesheet" href="./CSS/setAdmin.css">
+</head>
+<body>
+
+<!-- Navbar -->
+<nav class="navbar py-2">
+  <div class="container d-flex align-items-center justify-content-between">
+    <div class="fw-bold" style="font-size:1.25rem;">Relife</div>
+    <span style="font-size:.85rem; color:var(--text-secondary);">
+      <i class="bi bi-gear-fill me-1" style="color:var(--liquid-primary)"></i>
+      Cài đặt Admin
+    </span>
+    <a href="index.html" class="btn btn-light btn-sm">
+      <i class="bi bi-house"></i>
+    </a>
+  </div>
+</nav>
+
+<!-- Loading -->
+<div id="loadingScreen">
+  <div class="spinner-relife"></div>
+  <div style="font-size:.9rem;color:var(--text-secondary);">Đang kiểm tra quyền truy cập...</div>
+</div>
+
+<!-- Access Denied -->
+<div id="accessDenied" class="d-flex">
+  <div class="denied-card">
+    <div class="denied-icon"><i class="bi bi-shield-lock-fill"></i></div>
+    <div class="denied-title">Không có quyền truy cập</div>
+    <div class="denied-desc" id="deniedMsg">Tài khoản của bạn không phải Admin.</div>
+    <a href="index.html" class="btn btn-primary rounded-pill px-4">
+      <i class="bi bi-house me-2"></i>Về trang chủ
+    </a>
+  </div>
+</div>
+
+<!-- Main Content -->
+<div id="mainContent">
+  <div class="container-main">
+
+    <!-- Header -->
+    <div class="relife-header">
+      <a href="index.html" class="relife-back-btn">
+        <i class="bi bi-arrow-left"></i>
+      </a>
+      <div class="relife-page-title">
+        <h4><i class="bi bi-toggles me-2" style="color:var(--liquid-primary)"></i>Feature Control</h4>
+        <small>Bật / tắt tính năng theo thời gian thực</small>
+      </div>
+      <div class="admin-chip">
+        <div class="admin-dot"></div>
+        <span id="adminName">Admin</span>
+      </div>
+    </div>
+
+    <!-- SYSTEM OVERRIDE -->
+    <div class="section-label">
+      <i class="bi bi-shield-exclamation" style="color:var(--liquid-danger)"></i>
+      System Override
+    </div>
+
+    <!-- Maintenance Mode -->
+    <div class="feature-card banner-danger" id="card_maintenanceMode">
+      <div class="feature-icon"><i class="bi bi-tools"></i></div>
+      <div class="feature-info">
+        <div class="feature-name">Maintenance Mode</div>
+        <div class="feature-desc">Tắt toàn bộ site cho mọi người dùng. Ghi đè tất cả toggle bên dưới.</div>
+      </div>
+      <div class="toggle-wrap">
+        <span class="toggle-lbl" id="lbl_maintenanceMode" style="color:var(--text-secondary)">OFF</span>
+        <label class="toggle">
+          <input type="checkbox" data-key="maintenanceMode">
+          <span class="toggle-track"></span><span class="toggle-thumb"></span>
+        </label>
+      </div>
+    </div>
+
+    <!-- Beta Mode Master -->
+    <div class="feature-card banner-warning" id="card_betaMode">
+      <div class="feature-icon"><i class="bi bi-flask-fill"></i></div>
+      <div class="feature-info">
+        <div class="feature-name">Chế độ Beta</div>
+        <div class="feature-desc">TẮT = phiên bản chính thức. Toàn bộ tính năng Beta phía dưới sẽ bị ẩn khỏi người dùng.</div>
+      </div>
+      <div class="toggle-wrap">
+        <span class="toggle-lbl" id="lbl_betaMode" style="color:var(--text-secondary)">OFF</span>
+        <label class="toggle">
+          <input type="checkbox" data-key="betaMode">
+          <span class="toggle-track"></span><span class="toggle-thumb"></span>
+        </label>
+      </div>
+    </div>
+
+    <!-- CORE FEATURES -->
+    <div class="section-label">
+      <i class="bi bi-cpu" style="color:var(--liquid-primary)"></i>
+      Tính năng Core
+    </div>
+
+    <div class="feature-card" id="card_allowRegister">
+      <div class="feature-icon"><i class="bi bi-person-plus"></i></div>
+      <div class="feature-info">
+        <div class="feature-name">Đăng ký tài khoản <span class="badge-core">CORE</span></div>
+        <div class="feature-desc">Cho phép người dùng mới tạo tài khoản.</div>
+      </div>
+      <div class="toggle-wrap">
+        <span class="toggle-lbl" id="lbl_allowRegister">--</span>
+        <label class="toggle">
+          <input type="checkbox" data-key="allowRegister">
+          <span class="toggle-track"></span><span class="toggle-thumb"></span>
+        </label>
+      </div>
+    </div>
+
+    <div class="feature-card" id="card_allowCreatePost">
+      <div class="feature-icon"><i class="bi bi-pencil-square"></i></div>
+      <div class="feature-info">
+        <div class="feature-name">Đăng bài viết <span class="badge-core">CORE</span></div>
+        <div class="feature-desc">Cho phép người dùng tạo bài viết mới.</div>
+      </div>
+      <div class="toggle-wrap">
+        <span class="toggle-lbl" id="lbl_allowCreatePost">--</span>
+        <label class="toggle">
+          <input type="checkbox" data-key="allowCreatePost">
+          <span class="toggle-track"></span><span class="toggle-thumb"></span>
+        </label>
+      </div>
+    </div>
+
+    <div class="feature-card" id="card_allowComment">
+      <div class="feature-icon"><i class="bi bi-chat-dots"></i></div>
+      <div class="feature-info">
+        <div class="feature-name">Bình luận <span class="badge-core">CORE</span></div>
+        <div class="feature-desc">Tắt toàn bộ tính năng comment trên bài viết.</div>
+      </div>
+      <div class="toggle-wrap">
+        <span class="toggle-lbl" id="lbl_allowComment">--</span>
+        <label class="toggle">
+          <input type="checkbox" data-key="allowComment">
+          <span class="toggle-track"></span><span class="toggle-thumb"></span>
+        </label>
+      </div>
+    </div>
+
+    <div class="feature-card" id="card_allowLikeDislike">
+      <div class="feature-icon"><i class="bi bi-hand-thumbs-up"></i></div>
+      <div class="feature-info">
+        <div class="feature-name">Like / Dislike <span class="badge-core">CORE</span></div>
+        <div class="feature-desc">Tắt nút react trên bài viết.</div>
+      </div>
+      <div class="toggle-wrap">
+        <span class="toggle-lbl" id="lbl_allowLikeDislike">--</span>
+        <label class="toggle">
+          <input type="checkbox" data-key="allowLikeDislike">
+          <span class="toggle-track"></span><span class="toggle-thumb"></span>
+        </label>
+      </div>
+    </div>
+
+    <div class="feature-card" id="card_allowFollow">
+      <div class="feature-icon"><i class="bi bi-person-check"></i></div>
+      <div class="feature-info">
+        <div class="feature-name">Follow người dùng <span class="badge-core">CORE</span></div>
+        <div class="feature-desc">Tắt nút Follow trên bài viết và trang Profile.</div>
+      </div>
+      <div class="toggle-wrap">
+        <span class="toggle-lbl" id="lbl_allowFollow">--</span>
+        <label class="toggle">
+          <input type="checkbox" data-key="allowFollow">
+          <span class="toggle-track"></span><span class="toggle-thumb"></span>
+        </label>
+      </div>
+    </div>
+
+    <div class="feature-card" id="card_allowSearch">
+      <div class="feature-icon"><i class="bi bi-search"></i></div>
+      <div class="feature-info">
+        <div class="feature-name">Tìm kiếm <span class="badge-core">CORE</span></div>
+        <div class="feature-desc">Tắt thanh tìm kiếm người dùng và bài viết.</div>
+      </div>
+      <div class="toggle-wrap">
+        <span class="toggle-lbl" id="lbl_allowSearch">--</span>
+        <label class="toggle">
+          <input type="checkbox" data-key="allowSearch">
+          <span class="toggle-track"></span><span class="toggle-thumb"></span>
+        </label>
+      </div>
+    </div>
+
+    <!-- BETA FEATURES -->
+    <div class="section-label">
+      <i class="bi bi-flask" style="color:var(--liquid-warning)"></i>
+      Tính năng Beta
+    </div>
+
+    <div id="betaSection">
+
+      <div class="feature-card" id="card_showNotification">
+        <div class="feature-icon"><i class="bi bi-bell"></i></div>
+        <div class="feature-info">
+          <div class="feature-name">Trang Notification <span class="badge-beta">BETA</span></div>
+          <div class="feature-desc">Hiển thị link đến trang thông báo hệ thống trong menu.</div>
+        </div>
+        <div class="toggle-wrap">
+          <span class="toggle-lbl" id="lbl_showNotification">--</span>
+          <label class="toggle">
+            <input type="checkbox" data-key="showNotification">
+            <span class="toggle-track"></span><span class="toggle-thumb"></span>
+          </label>
+        </div>
+      </div>
+
+      <div class="feature-card" id="card_allowTagMention">
+        <div class="feature-icon"><i class="bi bi-at"></i></div>
+        <div class="feature-info">
+          <div class="feature-name">Tag @mention <span class="badge-beta">BETA</span></div>
+          <div class="feature-desc">Tắt tính năng gắn thẻ @TagName trong comment.</div>
+        </div>
+        <div class="toggle-wrap">
+          <span class="toggle-lbl" id="lbl_allowTagMention">--</span>
+          <label class="toggle">
+            <input type="checkbox" data-key="allowTagMention">
+            <span class="toggle-track"></span><span class="toggle-thumb"></span>
+          </label>
+        </div>
+      </div>
+
+      <div class="feature-card" id="card_allowEditComment">
+        <div class="feature-icon"><i class="bi bi-pencil"></i></div>
+        <div class="feature-info">
+          <div class="feature-name">Sửa comment <span class="badge-beta">BETA</span></div>
+          <div class="feature-desc">Cho phép người dùng chỉnh sửa comment của mình.</div>
+        </div>
+        <div class="toggle-wrap">
+          <span class="toggle-lbl" id="lbl_allowEditComment">--</span>
+          <label class="toggle">
+            <input type="checkbox" data-key="allowEditComment">
+            <span class="toggle-track"></span><span class="toggle-thumb"></span>
+          </label>
+        </div>
+      </div>
+
+      <div class="feature-card" id="card_allowReportComment">
+        <div class="feature-icon"><i class="bi bi-flag"></i></div>
+        <div class="feature-info">
+          <div class="feature-name">Báo cáo comment <span class="badge-beta">BETA</span></div>
+          <div class="feature-desc">Cho phép user báo cáo comment vi phạm.</div>
+        </div>
+        <div class="toggle-wrap">
+          <span class="toggle-lbl" id="lbl_allowReportComment">--</span>
+          <label class="toggle">
+            <input type="checkbox" data-key="allowReportComment">
+            <span class="toggle-track"></span><span class="toggle-thumb"></span>
+          </label>
+        </div>
+      </div>
+
+      <div class="feature-card" id="card_showVisitors">
+        <div class="feature-icon"><i class="bi bi-people"></i></div>
+        <div class="feature-info">
+          <div class="feature-name">Khách ghé thăm Profile <span class="badge-beta">BETA</span></div>
+          <div class="feature-desc">Tắt tính năng xem lịch sử ghé thăm trang Profile.</div>
+        </div>
+        <div class="toggle-wrap">
+          <span class="toggle-lbl" id="lbl_showVisitors">--</span>
+          <label class="toggle">
+            <input type="checkbox" data-key="showVisitors">
+            <span class="toggle-track"></span><span class="toggle-thumb"></span>
+          </label>
+        </div>
+      </div>
+
+      <div class="feature-card" id="card_showAchievements">
+        <div class="feature-icon"><i class="bi bi-trophy"></i></div>
+        <div class="feature-info">
+          <div class="feature-name">Thành tích <span class="badge-beta">BETA</span></div>
+          <div class="feature-desc">Hiển thị / ẩn mục Thành tích trong trang Profile.</div>
+        </div>
+        <div class="toggle-wrap">
+          <span class="toggle-lbl" id="lbl_showAchievements">--</span>
+          <label class="toggle">
+            <input type="checkbox" data-key="showAchievements">
+            <span class="toggle-track"></span><span class="toggle-thumb"></span>
+          </label>
+        </div>
+      </div>
+
+    </div><!-- /betaSection -->
+
+  </div><!-- /container-main -->
+</div><!-- /mainContent -->
+
+<!-- Save Bar -->
+<div class="save-bar" id="saveBar">
+  <div class="save-hint">
+    <i class="bi bi-exclamation-circle-fill"></i>
+    Có thay đổi chưa lưu
+  </div>
+  <button class="btn-save" id="saveBtn">
+    <i class="bi bi-cloud-upload"></i> Lưu cấu hình
+  </button>
+</div>
+
+<!-- Toast -->
+<div class="relife-toast" id="toast"></div>
+
+<!-- Version Badge -->
+<div class="relife-version-badge">
+  <span class="v-label">Relife</span>
+  <span class="v-num">Admin Panel</span>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+
+  <script type="module" src="JS/setAdmin.js"></script>
+</body>
+</html>

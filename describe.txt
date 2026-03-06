@@ -246,3 +246,4 @@ Relife 4 (r4.2.226):
 -Phần Menu đã được điều chỉnh: Ở phần thông tin user có hiển thị thêm UID tài khoản để khi mất tài khoản có thể dùng UID này yêu cầu khôi phục, có thể nhấn vào phần thông tin này để vào trang profile
 -+ Sắp xếp lại bố cục các nút để vào các trang, các nút đã được làm thành dạng block to hơn và mỗi hàng 2 nút.
 - Trên trang INDEX, giòe đây sẽ không load toàn bộ bài viết mà chỉ load một ít (khoảng 10 bài), khi người dùng lướt đến thì mới load thêm
+Relife 5 (r5.X.426):

@@ -41,9 +41,9 @@ const filterUserName = document.getElementById('filterUserName');
 const clearFilterBtn = document.getElementById('clearFilterBtn');
 const loadingIndicator = document.getElementById('loadingIndicator');
 const floatingActions = document.getElementById('floatingActions');
-const fabScrollToTop = document.getElementById('fabScrollToTop');
 const fabScrollToUsers = document.getElementById('fabScrollToUsers');
 const mainHeader = document.getElementById('mainHeader');
+const bottomTabBar = document.getElementById('bottomTabBar');
 const userSection = document.getElementById('userSection');
 
 // Utilities
@@ -151,10 +151,10 @@ async function loadData() {
     followingCount.textContent = followingList.length;
     friendsCount.textContent = friendsList.length;
 
-    // Render users
+    // ALWAYS render users first (regardless of posts)
     renderUsers();
 
-    // Load posts
+    // Then load posts
     await loadPosts();
 
   } catch (err) {
@@ -185,8 +185,17 @@ async function checkIfFriend(userId) {
 function renderUsers() {
   const users = currentTab === 'following' ? followingList : friendsList;
 
+  // Clear both containers
+  userListHorizontal.innerHTML = '';
+  userGrid.innerHTML = '';
+
   if (users.length === 0) {
-    showEmptyState(currentTab === 'following' ? 'no-following' : 'no-friends');
+    const emptyMsg = currentTab === 'following' 
+      ? '<div class="relife-empty-state"><i class="bi bi-people"></i><h5>Chưa theo dõi ai</h5><p>Hãy bắt đầu theo dõi những người bạn quan tâm.</p></div>'
+      : '<div class="relife-empty-state"><i class="bi bi-emoji-frown"></i><h5>Chưa có bạn bè</h5><p>Bạn bè là những người theo dõi lẫn nhau.</p></div>';
+    
+    userListHorizontal.innerHTML = emptyMsg;
+    userGrid.innerHTML = emptyMsg;
     return;
   }
 
@@ -198,10 +207,8 @@ function renderUsers() {
   });
 
   if (isGridView) {
-    userGrid.innerHTML = '';
     userGrid.appendChild(fragment);
   } else {
-    userListHorizontal.innerHTML = '';
     userListHorizontal.appendChild(fragment);
   }
 }
@@ -282,7 +289,7 @@ async function loadPosts() {
   try {
     const users = currentTab === 'following' ? followingList : friendsList;
     if (users.length === 0) {
-      showEmptyState(currentTab === 'following' ? 'no-following' : 'no-friends');
+      showEmptyState('no-posts');
       return;
     }
 
@@ -427,11 +434,18 @@ function createPostCard(post, index) {
     </a>`
   ).join('');
 
+  // Check if user has liked/disliked (you can track this in state if needed)
+  const hasLiked = false; // TODO: implement like tracking
+  const hasDisliked = false; // TODO: implement dislike tracking
+
   card.innerHTML = `
     <div class="relife-post-header">
       <img src="${author.avatarUrl}" class="relife-post-avatar" alt="avatar" onclick="window.navigateToProfile('${post.userId}')">
       <div class="relife-post-author-info">
-        <div class="relife-post-author-name" onclick="window.navigateToProfile('${post.userId}')">${esc(author.displayName)}</div>
+        <div class="relife-post-author-name" onclick="window.navigateToProfile('${post.userId}')">
+          ${esc(author.displayName)}
+          ${author.isFriend ? '<span class="relife-post-verified-badge"><i class="bi bi-check-lg"></i></span>' : ''}
+        </div>
         ${author.tagName ? `<div class="relife-post-author-tag" onclick="window.navigateToProfile('${post.userId}')">${esc(author.tagName)}</div>` : ''}
       </div>
       <div class="relife-post-time">
@@ -440,31 +454,60 @@ function createPostCard(post, index) {
       </div>
     </div>
     
-    <div class="relife-post-title">${esc(post.title || 'Không có tiêu đề')}</div>
+    <div class="relife-post-content">
+      <div class="relife-post-title">${esc(post.title || 'Không có tiêu đề')}</div>
+      ${hashtagsHtml ? `<div class="relife-post-hashtags">${hashtagsHtml}</div>` : ''}
+    </div>
     
-    ${hashtagsHtml ? `<div class="relife-post-hashtags">${hashtagsHtml}</div>` : ''}
-    
-    <div class="relife-post-stats">
-      <div class="relife-stat-item">
+    <div class="relife-post-actions">
+      <button class="relife-action-btn ${hasLiked ? 'liked' : ''}" data-action="like" data-post-id="${post.id}">
         <i class="bi bi-hand-thumbs-up-fill"></i>
         <span>${post.likes || 0}</span>
-      </div>
-      <div class="relife-stat-item">
+      </button>
+      <button class="relife-action-btn ${hasDisliked ? 'disliked' : ''}" data-action="dislike" data-post-id="${post.id}">
         <i class="bi bi-hand-thumbs-down-fill"></i>
         <span>${post.dislikes || 0}</span>
-      </div>
-      <div class="relife-stat-item">
+      </button>
+      <button class="relife-action-btn" data-action="comment" data-post-id="${post.id}">
         <i class="bi bi-chat-fill"></i>
         <span>${post.commentsCount || 0}</span>
-      </div>
+      </button>
       <a href="post.html?id=${post.id}" class="relife-view-post-btn">
-        <span>Xem bài</span>
+        <span>Xem chi tiết</span>
         <i class="bi bi-arrow-right"></i>
       </a>
     </div>
   `;
 
+  // Add event listeners for action buttons
+  const likeBtn = card.querySelector('[data-action="like"]');
+  const dislikeBtn = card.querySelector('[data-action="dislike"]');
+  const commentBtn = card.querySelector('[data-action="comment"]');
+
+  likeBtn.addEventListener('click', () => handlePostAction('like', post.id));
+  dislikeBtn.addEventListener('click', () => handlePostAction('dislike', post.id));
+  commentBtn.addEventListener('click', () => {
+    window.location.href = `post.html?id=${post.id}#comments`;
+  });
+
   return card;
+}
+
+// Handle post actions (like, dislike)
+async function handlePostAction(action, postId) {
+  if (!currentUser) {
+    alert('Bạn cần đăng nhập để thực hiện hành động này');
+    return;
+  }
+
+  try {
+    // TODO: Implement actual like/dislike logic with Firebase
+    console.log(`${action} post ${postId}`);
+    // For now, just navigate to post detail
+    window.location.href = `post.html?id=${postId}`;
+  } catch (err) {
+    console.error('Action error:', err);
+  }
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -513,14 +556,16 @@ tabFriends.addEventListener('click', () => {
 });
 
 function updateTabUI() {
+  // Update bottom tab bar
+  const allTabs = document.querySelectorAll('.relife-bottom-tab');
+  allTabs.forEach(tab => tab.classList.remove('active'));
+  
   if (currentTab === 'following') {
     tabFollowing.classList.add('active');
-    tabFriends.classList.remove('active');
     userSectionLabel.textContent = 'Danh sách theo dõi';
     postsSectionLabel.textContent = 'Bài viết từ người bạn theo dõi';
   } else {
     tabFriends.classList.add('active');
-    tabFollowing.classList.remove('active');
     userSectionLabel.textContent = 'Danh sách bạn bè';
     postsSectionLabel.textContent = 'Bài viết từ bạn bè';
   }
@@ -544,6 +589,7 @@ toggleViewBtn.addEventListener('click', () => {
     toggleViewBtn.innerHTML = '<i class="bi bi-grid-3x3-gap-fill"></i><span>Chỉ user</span>';
   }
 
+  // Re-render users in new view mode
   renderUsers();
 });
 
@@ -552,46 +598,59 @@ toggleViewBtn.addEventListener('click', () => {
 // ═══════════════════════════════════════════════════════════
 let lastScrollTop = 0;
 let scrollTimeout;
+let isScrollingDown = false;
 
 window.addEventListener('scroll', () => {
   clearTimeout(scrollTimeout);
-  scrollTimeout = setTimeout(handleScroll, 100);
-});
+  scrollTimeout = setTimeout(handleScroll, 50);
+}, { passive: true });
 
 function handleScroll() {
   const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+  const scrollDirection = scrollTop > lastScrollTop ? 'down' : 'up';
 
-  // Show/hide floating actions
-  if (scrollTop > 300) {
-    floatingActions.style.display = 'flex';
+  // Detect scroll direction
+  if (scrollTop > lastScrollTop && scrollTop > 100) {
+    // Scrolling down - hide header and tab bar
+    if (!isScrollingDown) {
+      mainHeader.classList.add('scrolled-down');
+      bottomTabBar.classList.add('scrolled-down');
+      isScrollingDown = true;
+    }
+  } else if (scrollTop < lastScrollTop) {
+    // Scrolling up - show header and tab bar
+    if (isScrollingDown) {
+      mainHeader.classList.remove('scrolled-down');
+      bottomTabBar.classList.remove('scrolled-down');
+      isScrollingDown = false;
+    }
+  }
+
+  // Show floating action button when scrolled down
+  if (isScrollingDown && scrollTop > 200) {
+    floatingActions.style.display = 'block';
   } else {
     floatingActions.style.display = 'none';
   }
 
-  // Hide header and user section when scrolled
-  if (scrollTop > 200) {
-    mainHeader.classList.add('scrolled');
-    userSection.classList.add('scrolled');
-  } else {
-    mainHeader.classList.remove('scrolled');
-    userSection.classList.remove('scrolled');
-  }
-
-  // Infinite scroll
+  // Infinite scroll for posts
   if (window.innerHeight + scrollTop >= document.body.offsetHeight - 500) {
     loadMorePosts();
   }
 
-  lastScrollTop = scrollTop;
+  lastScrollTop = scrollTop <= 0 ? 0 : scrollTop;
 }
 
-// Floating action buttons
-fabScrollToTop.addEventListener('click', () => {
-  window.scrollTo({ top: 0, behavior: 'smooth' });
-});
-
+// Scroll to users section
 fabScrollToUsers.addEventListener('click', () => {
   userSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  
+  // Show header and tab bar after scroll
+  setTimeout(() => {
+    mainHeader.classList.remove('scrolled-down');
+    bottomTabBar.classList.remove('scrolled-down');
+    isScrollingDown = false;
+  }, 500);
 });
 
 // ═══════════════════════════════════════════════════════════
@@ -613,34 +672,9 @@ function showEmptyState(type) {
           </a>
         </div>
       `;
-      break;
-
-    case 'no-following':
-      html = `
-        <div class="relife-empty-state">
-          <i class="bi bi-people"></i>
-          <h5>Chưa theo dõi ai</h5>
-          <p>Hãy bắt đầu theo dõi những người bạn quan tâm để xem bài viết của họ.</p>
-          <a href="index.html" class="relife-empty-state-btn">
-            <i class="bi bi-house"></i>
-            <span>Khám phá</span>
-          </a>
-        </div>
-      `;
-      break;
-
-    case 'no-friends':
-      html = `
-        <div class="relife-empty-state">
-          <i class="bi bi-emoji-frown"></i>
-          <h5>Chưa có bạn bè</h5>
-          <p>Bạn bè là những người mà bạn và họ đều theo dõi lẫn nhau. Hãy kết nối với mọi người!</p>
-          <a href="index.html" class="relife-empty-state-btn">
-            <i class="bi bi-person-plus"></i>
-            <span>Tìm bạn bè</span>
-          </a>
-        </div>
-      `;
+      postsList.innerHTML = html;
+      userListHorizontal.innerHTML = html;
+      userGrid.innerHTML = html;
       break;
 
     case 'no-posts':
@@ -648,15 +682,12 @@ function showEmptyState(type) {
         <div class="relife-empty-state">
           <i class="bi bi-inbox"></i>
           <h5>Chưa có bài viết</h5>
-          <p>Những người bạn theo dõi chưa đăng bài nào.</p>
+          <p>Những người bạn ${currentTab === 'friends' ? 'là bạn bè' : 'theo dõi'} chưa đăng bài nào.</p>
         </div>
       `;
+      postsList.innerHTML = html;
       break;
   }
-
-  postsList.innerHTML = html;
-  userListHorizontal.innerHTML = html;
-  userGrid.innerHTML = html;
 }
 
 function showError(message) {
