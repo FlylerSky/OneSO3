@@ -851,3 +851,218 @@ body {
   color: var(--text-secondary);
   line-height: 1.5;
 }
+
+/* Admin config edit button in current version panel */
+.btn-admin-edit-cfg {
+  margin-top: 10px;
+  background: rgba(0, 122, 255, 0.08);
+  border: 1px solid rgba(0, 122, 255, 0.2);
+  color: var(--liquid-primary);
+  font-size: 0.8rem;
+  font-weight: 700;
+  padding: 6px 14px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+}
+.btn-admin-edit-cfg:hover {
+  background: rgba(0, 122, 255, 0.15);
+  transform: scale(1.03);
+}
+
+/* Config modal note */
+.cfg-note {
+  background: rgba(0, 122, 255, 0.06);
+  border: 1px solid rgba(0, 122, 255, 0.15);
+  border-radius: 10px;
+  padding: 10px 14px;
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+.cfg-note code {
+  background: rgba(0,122,255,0.1);
+  color: var(--liquid-primary);
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-size: 0.82rem;
+}
+
+/* ============================================
+   LOADING OVERLAY
+   ============================================ */
+.page-loading-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(245, 245, 247, 0.85);
+  backdrop-filter: blur(8px);
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+}
+
+.loading-spinner {
+  width: 44px;
+  height: 44px;
+  border: 3px solid rgba(0, 122, 255, 0.15);
+  border-top-color: var(--liquid-primary);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.loading-text {
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+/* ============================================
+   ADMIN CONFIG BAR
+   ============================================ */
+.admin-config-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: linear-gradient(135deg, rgba(255,149,0,0.08), rgba(255,59,48,0.05));
+  border: 1px solid rgba(255, 149, 0, 0.25);
+  border-radius: 16px;
+  padding: 12px 20px;
+  margin-bottom: var(--spacing-lg);
+  animation: fadeInUp 0.4s ease both;
+}
+
+.btn-admin-config {
+  background: linear-gradient(135deg, rgba(255,149,0,0.15), rgba(255,59,48,0.1));
+  border: 1px solid rgba(255, 149, 0, 0.3);
+  color: var(--liquid-warning);
+  font-size: 0.82rem;
+  font-weight: 700;
+  padding: 7px 16px;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+}
+
+.btn-admin-config:hover {
+  background: linear-gradient(135deg, rgba(255,149,0,0.25), rgba(255,59,48,0.18));
+  transform: scale(1.03);
+}
+
+/* ============================================
+   CONFIG EDITOR MODAL SECTIONS
+   ============================================ */
+.config-section {
+  background: #f8f9fa;
+  border-radius: 14px;
+  padding: 16px 18px;
+  margin-bottom: 16px;
+  border: 1px solid #eee;
+}
+
+.config-section-title {
+  font-size: 0.85rem;
+  font-weight: 800;
+  color: var(--text-primary);
+  margin-bottom: 14px;
+  display: flex;
+  align-items: center;
+}
+
+/* ============================================
+   PERMISSION / CONFIG ERROR BANNER
+   ============================================ */
+.perm-banner {
+  display: flex;
+  gap: var(--spacing-md);
+  align-items: flex-start;
+  background: rgba(255, 149, 0, 0.07);
+  border: 1.5px solid rgba(255, 149, 0, 0.35);
+  border-radius: 20px;
+  padding: var(--spacing-lg) var(--spacing-xl);
+  margin-bottom: var(--spacing-lg);
+  animation: fadeInUp 0.4s ease;
+}
+
+.perm-banner-icon {
+  font-size: 1.6rem;
+  color: var(--liquid-warning);
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.perm-banner-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.perm-banner-title {
+  font-weight: 800;
+  font-size: 0.95rem;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+}
+
+.perm-banner-title code {
+  font-family: 'Courier New', monospace;
+  background: rgba(255, 149, 0, 0.12);
+  color: var(--liquid-warning);
+  padding: 1px 6px;
+  border-radius: 5px;
+  font-size: 0.85rem;
+}
+
+.perm-banner-desc {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  margin-bottom: 10px;
+  line-height: 1.5;
+}
+
+.perm-banner-code {
+  background: #1e1e2e;
+  color: #cdd6f4;
+  font-family: 'Courier New', monospace;
+  font-size: 0.78rem;
+  line-height: 1.7;
+  padding: 12px 16px;
+  border-radius: 12px;
+  overflow-x: auto;
+  margin-bottom: 12px;
+  white-space: pre;
+  border: 1px solid rgba(255,255,255,0.06);
+}
+
+.perm-banner-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.perm-step {
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.perm-step b {
+  color: var(--text-primary);
+}
+
+@media (max-width: 600px) {
+  .perm-banner { flex-direction: column; gap: 8px; }
+  .perm-banner-code { font-size: 0.7rem; }
+}

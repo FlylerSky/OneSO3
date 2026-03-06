@@ -1,134 +1,158 @@
 // JS/roadmap.js — Relife Tiến trình
-// - Countdown đến lần update tiếp theo
-// - Timeline 6 cập nhật trong năm
-// - Phần rò rỉ (admin-only đăng)
+// Toàn bộ config (phiên bản gốc, phiên bản hiện tại, lịch cập nhật)
+// được đọc từ Firestore doc: config/roadmap
+// Không có giá trị hardcode nào trong source.
 
 import { initFirebase } from '../firebase-config.js';
 import {
   getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut
 } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-auth.js";
 import {
-  collection, query, orderBy, onSnapshot, addDoc, deleteDoc,
-  doc, getDoc, serverTimestamp
+  collection, doc, getDoc, setDoc, onSnapshot,
+  query, orderBy, addDoc, deleteDoc, serverTimestamp
 } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore.js";
 
-const db = initFirebase();
+const db   = initFirebase();
 const auth = getAuth();
 
 // ============================================================
-// VERSIONING SYSTEM — Relife 4+
+// STATE — sẽ được điền sau khi load config từ Firestore
 // ============================================================
-// Relife bắt đầu lịch cập nhật cố định từ Relife 4, phát hành 2/2/2026
-// Tên phiên bản: "Relife N"  — N tăng dần mỗi chu kỳ
-// Mã phiên bản:  rN.X.MMYY
-//   N    = số hiệu phiên bản (4, 5, 6, ...)
-//   X    = số bản vá trong chu kỳ (deploy lên server test)
-//   MMYY = tháng + 2 chữ số cuối năm, KHÔNG pad zero cho tháng đơn lẻ
-//          VD: tháng 4/2026 → "426", tháng 12/2026 → "1226"
+let CFG = null; // object config từ Firestore
+/*
+  Cấu trúc Firestore doc: config/roadmap
+  {
+    originN:          4,          // Số hiệu phiên bản của mốc khởi đầu lịch cố định
+    originTimestamp:  Timestamp,  // Ngày phát hành của mốc đó (VD: 2/2/2026)
+    originCode:       "r4.2.226", // Mã phiên bản chính xác của mốc đó
+    currentName:      "Relife 4", // Tên phiên bản hiện tại
+    currentCode:      "r4.2.226", // Mã phiên bản hiện tại
+    currentTimestamp: Timestamp,  // Ngày phát hành phiên bản hiện tại
+    currentPatchNum:  2,          // Số bản vá phiên bản hiện tại (X)
+    updateMonths:     [2,4,6,8,10,12], // Các tháng có cập nhật
+    updateDay:        2,          // Ngày trong tháng có cập nhật
+    maintenanceDaysBefore: 2,     // Số ngày trước khi server đóng
+  }
+*/
 
-// Phiên bản khởi đầu cố định
-const RELIFE_ORIGIN = {
-  n:    4,
-  code: 'r4.2.226',
-  date: new Date(2026, 1, 2), // 2/2/2026
-};
+// ============================================================
+// HELPERS — VERSIONING (dùng CFG, không hardcode)
+// ============================================================
+const UPDATE_MONTHS_DEFAULT = [2, 4, 6, 8, 10, 12];
+const UPDATE_DAY_DEFAULT    = 2;
+const MAINT_DAYS_DEFAULT    = 2;
 
-// Thông tin phiên bản hiện tại (Relife 4 vừa phát hành 2/2/2026)
-const CURRENT_VERSION = {
-  name: 'Relife 4',
-  code: 'r4.2.226',
-  releaseDate: new Date(2026, 1, 2),
-};
-
-const UPDATE_MONTHS = [2, 4, 6, 8, 10, 12];
+function getUpdateMonths()     { return CFG?.updateMonths         || UPDATE_MONTHS_DEFAULT; }
+function getUpdateDay()        { return CFG?.updateDay            || UPDATE_DAY_DEFAULT; }
+function getMaintenanceDays()  { return CFG?.maintenanceDaysBefore || MAINT_DAYS_DEFAULT; }
+function getOriginDate()       { return CFG?.originTimestamp?.toDate?.() || null; }
+function getOriginN()          { return CFG?.originN ?? null; }
 
 function getUpdateDates(year) {
-  return UPDATE_MONTHS.map(m => new Date(year, m - 1, 2, 0, 0, 0, 0));
+  return getUpdateMonths().map(m => new Date(year, m - 1, getUpdateDay(), 0, 0, 0, 0));
 }
 
 function getMaintenanceStart(updateDate) {
-  return new Date(updateDate.getTime() - 2 * 24 * 3600 * 1000);
+  return new Date(updateDate.getTime() - getMaintenanceDays() * 24 * 3600 * 1000);
 }
 
-/** Đếm số chu kỳ từ mốc gốc đến một ngày update (bao gồm mốc gốc = 0) */
-function cycleIndexOf(updateDate) {
-  const year = updateDate.getFullYear();
-  // Tập hợp tất cả ngày update từ 2026 đến năm đó
-  let allDates = [];
-  for (let y = RELIFE_ORIGIN.date.getFullYear(); y <= year + 1; y++) {
-    allDates.push(...getUpdateDates(y));
-  }
-  allDates = allDates.filter(d => d >= RELIFE_ORIGIN.date);
-  allDates.sort((a, b) => a - b);
-  return allDates.findIndex(d =>
-    d.getFullYear() === updateDate.getFullYear() &&
-    d.getMonth()    === updateDate.getMonth()    &&
-    d.getDate()     === updateDate.getDate()
-  );
+function sameDay(a, b) {
+  return a.getFullYear() === b.getFullYear()
+      && a.getMonth()    === b.getMonth()
+      && a.getDate()     === b.getDate();
 }
 
-/** Số hiệu phiên bản N = RELIFE_ORIGIN.n + index */
-function getReliefeN(updateDate) {
-  const idx = cycleIndexOf(updateDate);
-  return RELIFE_ORIGIN.n + idx;
+/**
+ * Tính số hiệu phiên bản N cho một ngày update.
+ * Dựa thuần vào originN và originMonth/originYear từ CFG — không so sánh Date objects.
+ * Công thức: N = originN + số chu kỳ từ origin đến updateDate
+ * Mỗi chu kỳ = 2 tháng (hoặc khoảng cách giữa các updateMonths)
+ */
+function calcN(updateDate) {
+  const originN = getOriginN();
+  if (originN === null) return '?';
+
+  // Lấy originMonth và originYear từ CFG.originTimestamp
+  const originTs = CFG?.originTimestamp?.toDate?.();
+  if (!originTs) return '?';
+  const originYear  = originTs.getFullYear();
+  const originMonth = originTs.getMonth() + 1; // 1-indexed
+
+  const months = [...getUpdateMonths()].sort((a, b) => a - b);
+
+  // Tìm index của originMonth trong mảng updateMonths
+  const originIdx = months.indexOf(originMonth);
+  if (originIdx === -1) return '?';
+
+  // Tìm index của updateDate month trong mảng updateMonths  
+  const updateMonth = updateDate.getMonth() + 1;
+  const updateYear  = updateDate.getFullYear();
+  const updateIdx   = months.indexOf(updateMonth);
+  if (updateIdx === -1) return '?';
+
+  // Tổng số chu kỳ = (năm diff * số update/năm) + (index diff)
+  const cyclesPerYear = months.length;
+  const yearDiff  = updateYear - originYear;
+  const indexDiff = updateIdx - originIdx;
+  const totalCycles = yearDiff * cyclesPerYear + indexDiff;
+
+  return originN + totalCycles;
+}
+
+/** Mã MMYY: tháng không pad zero, năm 2 chữ số */
+function buildMMYY(date) {
+  const m  = date.getMonth() + 1;
+  const yy = date.getFullYear() % 100;
+  return `${m}${yy}`;
 }
 
 /** Tên phiên bản: "Relife N" */
 function getRelifeName(updateDate) {
-  if (updateDate < RELIFE_ORIGIN.date) return 'Trước Relife 4';
-  return `Relife ${getReliefeN(updateDate)}`;
+  const n = calcN(updateDate);
+  if (n === null || n === '?') return '—';
+  return `Relife ${n}`;
 }
 
 /**
- * Mã MMYY: tháng không pad zero, năm 2 chữ số không pad zero
- * tháng 4/2026 → "426"
- * tháng 12/2026 → "1226"
- * tháng 2/2026  → "226"
+ * Mã phiên bản: rN.X.MMYY
+ * - Nếu N == originN → dùng originCode từ config (phiên bản gốc đã biết chính xác)
+ * - Phiên bản tương lai → X = "?"
  */
-function buildMMYY(date) {
-  const m  = date.getMonth() + 1; // 1–12
-  const yy = date.getFullYear() % 100; // 26, 27...
-  return `${m}${yy}`;
-}
-
-/**
- * Mã phiên bản đầy đủ: rN.X.MMYY
- * Với phiên bản tương lai, X = "?" (chưa biết số bản vá)
- * Với Relife 4 (mốc gốc) dùng code đã biết
- */
-function getVersionCode(updateDate, patchNum) {
-  if (updateDate < RELIFE_ORIGIN.date) return '';
-  // Nếu đúng là ngày Relife 4 → trả về code chính xác đã biết
-  if (sameDay(updateDate, RELIFE_ORIGIN.date)) return RELIFE_ORIGIN.code;
-  const n = getReliefeN(updateDate);
-  const x = (patchNum !== undefined && patchNum !== null) ? patchNum : '?';
-  return `r${n}.${x}.${buildMMYY(updateDate)}`;
-}
-
-function sameDay(a, b) {
-  return a.getFullYear() === b.getFullYear() &&
-         a.getMonth()    === b.getMonth()    &&
-         a.getDate()     === b.getDate();
+function getVersionCode(updateDate) {
+  const n = calcN(updateDate);
+  if (n === null || n === '?') return '';
+  // Nếu là phiên bản gốc (N == originN) → dùng code lưu trong config
+  if (n === getOriginN() && CFG?.originCode) return CFG.originCode;
+  return `r${n}.?.${buildMMYY(updateDate)}`;
 }
 
 // ============================================================
 // CYCLE INFO
 // ============================================================
-function getCurrentCycleInfo(now) {
+function getAllUpdateDatesFromOrigin() {
+  const origin = getOriginDate();
+  if (!origin) return [];
+  const now  = new Date();
   const year = now.getFullYear();
-  let allDates = [
+  let dates = [
     ...getUpdateDates(year - 1),
     ...getUpdateDates(year),
     ...getUpdateDates(year + 1),
-  ].filter(d => d >= RELIFE_ORIGIN.date);
+  ].filter(d => d >= origin);
+  dates.sort((a, b) => a - b);
+  return dates;
+}
 
-  allDates.sort((a, b) => a - b);
+function getCurrentCycleInfo() {
+  const now   = new Date();
+  const dates = getAllUpdateDatesFromOrigin();
+  if (!dates.length) return null;
 
-  let nextUpdateIdx = allDates.findIndex(d => d > now);
-  if (nextUpdateIdx === -1) nextUpdateIdx = allDates.length - 1;
+  let nextIdx = dates.findIndex(d => d > now);
+  if (nextIdx === -1) nextIdx = dates.length - 1;
 
-  const nextUpdate = allDates[nextUpdateIdx];
-  const prevUpdate = allDates[nextUpdateIdx - 1] || RELIFE_ORIGIN.date;
+  const nextUpdate = dates[nextIdx];
+  const prevUpdate = dates[nextIdx - 1] || getOriginDate();
   const maintStart = getMaintenanceStart(nextUpdate);
 
   let status = 'developing';
@@ -136,8 +160,8 @@ function getCurrentCycleInfo(now) {
   else if (now >= nextUpdate) status = 'released';
 
   const cycleLength = nextUpdate - prevUpdate;
-  const elapsed = now - prevUpdate;
-  const percent = Math.max(0, Math.min(100, (elapsed / cycleLength) * 100));
+  const elapsed     = now - prevUpdate;
+  const percent     = Math.max(0, Math.min(100, (elapsed / cycleLength) * 100));
 
   return { nextUpdate, prevUpdate, maintStart, status, percent };
 }
@@ -146,11 +170,16 @@ function getCurrentCycleInfo(now) {
 // COUNTDOWN
 // ============================================================
 function pad(n) { return String(Math.floor(n)).padStart(2, '0'); }
+let countdownTimer = null;
 
 function updateCountdown() {
+  if (!CFG) return;
+  const info = getCurrentCycleInfo();
+  if (!info) return;
+  const { nextUpdate, prevUpdate, maintStart, status, percent } = info;
   const now = new Date();
-  const { nextUpdate, prevUpdate, maintStart, status, percent } = getCurrentCycleInfo(now);
 
+  // Target đếm ngược
   const target = (status === 'developing') ? maintStart : nextUpdate;
   const ms = target - now;
 
@@ -163,99 +192,103 @@ function updateCountdown() {
   };
 
   if (ms > 0) {
-    const totalSec = ms / 1000;
-    tickEl('cdDays',    Math.floor(totalSec / 86400));
-    tickEl('cdHours',   Math.floor((totalSec % 86400) / 3600));
-    tickEl('cdMinutes', Math.floor((totalSec % 3600) / 60));
-    tickEl('cdSeconds', Math.floor(totalSec % 60));
+    const s = ms / 1000;
+    tickEl('cdDays',    Math.floor(s / 86400));
+    tickEl('cdHours',   Math.floor((s % 86400) / 3600));
+    tickEl('cdMinutes', Math.floor((s % 3600) / 60));
+    tickEl('cdSeconds', Math.floor(s % 60));
   } else {
     ['cdDays','cdHours','cdMinutes','cdSeconds'].forEach(id => {
-      const el = document.getElementById(id);
-      if (el) el.textContent = '00';
+      const el = document.getElementById(id); if (el) el.textContent = '00';
     });
   }
 
-  // Tên và mã phiên bản tiếp theo
-  const nextName = getRelifeName(nextUpdate);
-  const nextCode = getVersionCode(nextUpdate);
-  document.getElementById('heroVersion').textContent = nextName;
+  // Tên + mã phiên bản tiếp theo
+  setText('heroVersion',     getRelifeName(nextUpdate));
+  setText('heroVersionCode', getVersionCode(nextUpdate));
 
-  const heroCodeEl = document.getElementById('heroVersionCode');
-  if (heroCodeEl) heroCodeEl.textContent = nextCode;
-
-  // Subtitle + label
+  // Label & subtitle — rõ ràng theo từng trạng thái
+  const nextName    = getRelifeName(nextUpdate);
   const nextDateStr = nextUpdate.toLocaleDateString('vi-VN', { day:'numeric', month:'long', year:'numeric' });
-  const heroLabelEl   = document.getElementById('heroLabel');
-  const heroSubtitleEl = document.getElementById('heroSubtitle');
+  const maintStr    = getMaintenanceStart(nextUpdate).toLocaleDateString('vi-VN', { day:'numeric', month:'long' });
 
   if (status === 'developing') {
-    if (heroLabelEl) heroLabelEl.textContent = 'Server tạm đóng sau';
-    if (heroSubtitleEl) heroSubtitleEl.textContent =
-      `Đang phát triển · Server bảo trì từ ${getMaintenanceStart(nextUpdate).toLocaleDateString('vi-VN', {day:'numeric', month:'long'})}`;
+    // Đang trong chu kỳ phát triển → đếm ngược đến khi server đóng
+    setText('heroLabel',    `Đang phát triển ${nextName} — server đóng sau`);
+    setText('heroSubtitle', `Server tạm đóng ngày ${maintStr} · Ra mắt ngày ${nextDateStr}`);
   } else if (status === 'maintenance') {
-    if (heroLabelEl) heroLabelEl.textContent = 'Ra mắt phiên bản mới sau';
-    if (heroSubtitleEl) heroSubtitleEl.textContent = `Server đang tạm đóng · Ra mắt ngày ${nextDateStr}`;
+    // Server đang đóng → đếm ngược đến ngày ra mắt
+    setText('heroLabel',    `${nextName} ra mắt sau`);
+    setText('heroSubtitle', `Server đang tạm đóng để chuẩn bị · Ra mắt ngày ${nextDateStr}`);
   } else {
-    if (heroLabelEl) heroLabelEl.textContent = 'Phiên bản mới đã ra mắt';
-    if (heroSubtitleEl) heroSubtitleEl.textContent = `Phiên bản mới đã ra mắt ngày ${nextDateStr}`;
+    setText('heroLabel',    `${nextName} đã ra mắt`);
+    setText('heroSubtitle', `Phát hành ngày ${nextDateStr}`);
   }
 
   // Progress bar
-  const fill = document.getElementById('progressFill');
-  const dot  = document.getElementById('progressDot');
-  const pct  = document.getElementById('progressPercent');
-  if (fill) fill.style.width = percent.toFixed(1) + '%';
-  if (dot)  dot.style.left   = percent.toFixed(1) + '%';
-  if (pct)  pct.textContent  = percent.toFixed(0) + '% chu kỳ phát triển';
+  setStyle('progressFill',  'width', percent.toFixed(1) + '%');
+  setStyle('progressDot',   'left',  percent.toFixed(1) + '%');
+  setText ('progressPercent', percent.toFixed(0) + '% chu kỳ phát triển');
 
-  const fmtShort = d => d.toLocaleDateString('vi-VN', {day:'numeric', month:'short'});
-  const startEl  = document.getElementById('progressStart');
-  const endEl    = document.getElementById('progressEnd');
-  const centerEl = document.getElementById('progressCenter');
-  if (startEl) startEl.textContent = fmtShort(prevUpdate);
-  if (endEl)   endEl.textContent   = fmtShort(nextUpdate);
-  if (centerEl) centerEl.textContent = `Bảo trì: ${fmtShort(maintStart)}`;
+  const fmtShort = d => d.toLocaleDateString('vi-VN', { day:'numeric', month:'short' });
+  setText('progressStart',  fmtShort(prevUpdate));
+  setText('progressEnd',    fmtShort(nextUpdate));
+  setText('progressCenter', `Bảo trì: ${fmtShort(maintStart)}`);
 
   // Status badge
-  const badge      = document.getElementById('statusBadge');
-  const statusText = document.getElementById('statusText');
-  if (badge && statusText) {
-    badge.className = 'status-badge ' + status;
-    const map = {
-      developing:  '🚀 Đang phát triển phiên bản mới',
-      maintenance: '🔧 Server đang tạm đóng để bảo trì',
-      released:    '✅ Phiên bản mới đã phát hành',
-    };
-    statusText.textContent = map[status] || '';
-  }
+  const badge = document.getElementById('statusBadge');
+  const stTxt = document.getElementById('statusText');
+  if (badge) badge.className = 'status-badge ' + status;
+  if (stTxt) stTxt.textContent = {
+    developing:  '🚀 Đang phát triển phiên bản mới',
+    maintenance: '🔧 Server đang tạm đóng để bảo trì',
+    released:    '✅ Phiên bản mới đã phát hành',
+  }[status] || '';
+}
+
+function setText(id, val) {
+  const el = document.getElementById(id); if (el) el.textContent = val;
+}
+function setStyle(id, prop, val) {
+  const el = document.getElementById(id); if (el) el.style[prop] = val;
 }
 
 // ============================================================
-// TIMELINE
+// TIMELINE — hiển thị đầy đủ phiên bản của năm hiện tại
+// Nếu tất cả phiên bản trong năm đã phát hành → tự động hiển thị sang năm sau
 // ============================================================
 function buildTimeline() {
-  const now = new Date();
-  const year = now.getFullYear();
-  document.getElementById('currentYear').textContent = year;
-
-  const updates = getUpdateDates(year);
+  if (!CFG) return;
+  const now  = new Date();
   const grid = document.getElementById('timelineGrid');
   if (!grid) return;
   grid.innerHTML = '';
 
+  // Xác định năm cần hiển thị:
+  // - Nếu update cuối cùng của năm hiện tại đã qua → hiển thị năm sau
+  // - Còn không → hiển thị năm hiện tại
+  const thisYear    = now.getFullYear();
+  const lastOfYear  = getUpdateDates(thisYear).at(-1);
+  const displayYear = (lastOfYear && now > lastOfYear) ? thisYear + 1 : thisYear;
+
+  setText('currentYear', displayYear);
+
+  // Lấy tất cả update của năm hiển thị — không filter bỏ gì cả
+  const updates = getUpdateDates(displayYear);
+
+  // prevDate cho card đầu tiên = update cuối của năm trước
+  const lastOfPrevYear = getUpdateDates(displayYear - 1).at(-1);
+
   updates.forEach((date, i) => {
     const maintStart = getMaintenanceStart(date);
-    const isMaint   = (now >= maintStart && now < date);
-    const prevDate  = i > 0 ? updates[i-1] : new Date(year - 1, 11, 2);
-    const isCurrent = !isMaint && (now >= prevDate && now < date);
-    const isDone    = now >= date;
+    const prevDate   = i > 0 ? updates[i - 1] : lastOfPrevYear;
+    const isDone     = now >= date;
+    const isMaint    = !isDone && now >= maintStart;
+    const isCurrent  = !isDone && !isMaint && now >= prevDate;
 
-    // Bỏ qua các ngày trước Relife 4 (tháng 2/2026 là mốc đầu)
-    const isBeforeRelife4 = date < RELIFE_ORIGIN.date;
-
-    const name = isBeforeRelife4 ? '—' : getRelifeName(date);
-    const code = isBeforeRelife4 ? 'Chưa áp dụng' : getVersionCode(date);
-    const dateStr = date.toLocaleDateString('vi-VN', { day: 'numeric', month: 'long' });
+    const name    = getRelifeName(date);
+    const code    = getVersionCode(date);
+    const dateStr = date.toLocaleDateString('vi-VN', { day:'numeric', month:'long' });
 
     let cardClass   = 'timeline-card';
     let iconClass   = 'timeline-icon future-icon';
@@ -264,32 +297,29 @@ function buildTimeline() {
     let statusHtml  = '<i class="bi bi-clock"></i> Sắp tới';
     let extraHtml   = '';
 
-    if (isBeforeRelife4) {
-      // Không hiển thị (trước lịch cố định) — bỏ qua
-      return;
-    } else if (isDone && !isCurrent && !isMaint) {
-      cardClass  += ' done';
-      iconClass   = 'timeline-icon done-icon';
-      iconHtml    = '<i class="bi bi-check-circle-fill"></i>';
-      statusClass = 'timeline-status st-done';
-      statusHtml  = '<i class="bi bi-check-circle-fill"></i> Đã phát hành';
-      const daysAgo = Math.floor((now - date) / 86400000);
-      extraHtml = `<div class="timeline-daysago">${daysAgo === 0 ? 'Hôm nay' : daysAgo + ' ngày trước'}</div>`;
+    if (isDone) {
+      cardClass   += ' done';
+      iconClass    = 'timeline-icon done-icon';
+      iconHtml     = '<i class="bi bi-check-circle-fill"></i>';
+      statusClass  = 'timeline-status st-done';
+      statusHtml   = '<i class="bi bi-check-circle-fill"></i> Đã phát hành';
+      const ago    = Math.floor((now - date) / 86400000);
+      extraHtml    = `<div class="timeline-daysago">${ago === 0 ? 'Hôm nay' : ago + ' ngày trước'}</div>`;
     } else if (isMaint) {
-      cardClass  += ' maintenance-mode';
-      iconClass   = 'timeline-icon maint-icon';
-      iconHtml    = '<i class="bi bi-tools"></i>';
-      statusClass = 'timeline-status st-maint';
-      statusHtml  = '<i class="bi bi-tools"></i> Đang bảo trì';
+      cardClass   += ' maintenance-mode';
+      iconClass    = 'timeline-icon maint-icon';
+      iconHtml     = '<i class="bi bi-tools"></i>';
+      statusClass  = 'timeline-status st-maint';
+      statusHtml   = '<i class="bi bi-tools"></i> Đang bảo trì';
     } else if (isCurrent) {
-      cardClass  += ' current';
-      iconClass   = 'timeline-icon current-icon';
-      iconHtml    = '<i class="bi bi-code-slash"></i>';
-      statusClass = 'timeline-status st-current';
-      statusHtml  = '<i class="bi bi-code-slash"></i> Đang phát triển';
+      cardClass   += ' current';
+      iconClass    = 'timeline-icon current-icon';
+      iconHtml     = '<i class="bi bi-code-slash"></i>';
+      statusClass  = 'timeline-status st-current';
+      statusHtml   = '<i class="bi bi-code-slash"></i> Đang phát triển';
     } else {
-      const daysLeft = Math.ceil((date - now) / 86400000);
-      extraHtml = `<div class="timeline-daysago">Còn ${daysLeft} ngày</div>`;
+      const left   = Math.ceil((date - now) / 86400000);
+      extraHtml    = `<div class="timeline-daysago">Còn ${left} ngày</div>`;
     }
 
     const card = document.createElement('div');
@@ -312,25 +342,193 @@ function buildTimeline() {
 }
 
 // ============================================================
-// CURRENT VERSION INFO PANEL
+// CURRENT VERSION PANEL — từ CFG
 // ============================================================
 function buildCurrentVersionPanel() {
+  if (!CFG) return;
   const panel = document.getElementById('currentVersionPanel');
   if (!panel) return;
+
+  const releaseTs   = CFG.currentTimestamp?.toDate?.();
+  const releaseDateStr = releaseTs
+    ? releaseTs.toLocaleDateString('vi-VN', { day:'numeric', month:'long', year:'numeric' })
+    : '—';
+
   panel.innerHTML = `
     <div class="cv-label">Phiên bản hiện tại</div>
-    <div class="cv-name">${CURRENT_VERSION.name}</div>
-    <div class="cv-code">${CURRENT_VERSION.code}</div>
+    <div class="cv-name">${esc(CFG.currentName || '—')}</div>
+    <div class="cv-code">${esc(CFG.currentCode || '—')}</div>
     <div class="cv-date">
       <i class="bi bi-calendar-check me-1"></i>
-      Phát hành ${CURRENT_VERSION.releaseDate.toLocaleDateString('vi-VN', {day:'numeric', month:'long', year:'numeric'})}
+      Phát hành ${releaseDateStr}
     </div>
     <div class="cv-note">
       <i class="bi bi-info-circle me-1"></i>
-      Kể từ Relife 4, lịch cập nhật được cố định 2 tháng/lần vào ngày 2 của tháng chẵn.
-      Các phiên bản trước đây (Relife 1–3) được cập nhật ngẫu nhiên.
+      Kể từ ${esc(CFG.currentName?.split(' ')[0] || 'Relife')} ${getOriginN()},
+      lịch cập nhật được cố định ${getUpdateMonths().length} lần/năm vào ngày
+      ${getUpdateDay()} của tháng ${getUpdateMonths().join(', ')}.
+      Các phiên bản trước đây được cập nhật ngẫu nhiên.
     </div>
   `;
+}
+
+// ============================================================
+// ADMIN — EDIT CONFIG MODAL
+// ============================================================
+function buildAdminConfigBtn() {
+  const section = document.getElementById('adminConfigSection');
+  if (!section) return;
+  if (!isAdmin) { section.style.display = 'none'; return; }
+  section.style.display = 'block';
+}
+
+window.openConfigEditor = async function () {
+  if (!isAdmin) return;
+  // Điền dữ liệu hiện tại vào form
+  const c = CFG || {};
+  setVal('cfgOriginN',       c.originN           ?? '');
+  setVal('cfgOriginCode',    c.originCode         ?? '');
+  setVal('cfgOriginDate',    tsToInputDate(c.originTimestamp));
+  setVal('cfgCurrentName',   c.currentName        ?? '');
+  setVal('cfgCurrentCode',   c.currentCode        ?? '');
+  setVal('cfgCurrentDate',   tsToInputDate(c.currentTimestamp));
+  setVal('cfgCurrentPatch',  c.currentPatchNum    ?? '');
+  setVal('cfgUpdateMonths',  (c.updateMonths       || UPDATE_MONTHS_DEFAULT).join(', '));
+  setVal('cfgUpdateDay',     c.updateDay           ?? UPDATE_DAY_DEFAULT);
+  setVal('cfgMaintDays',     c.maintenanceDaysBefore ?? MAINT_DAYS_DEFAULT);
+
+  const m = new bootstrap.Modal(document.getElementById('configEditorModal'));
+  m.show();
+};
+
+window.saveConfig = async function () {
+  if (!isAdmin) return;
+  const btn = document.getElementById('btnSaveConfig');
+  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Đang lưu...'; }
+
+  try {
+    const originDate  = new Date(document.getElementById('cfgOriginDate')?.value);
+    const currentDate = new Date(document.getElementById('cfgCurrentDate')?.value);
+    const months = document.getElementById('cfgUpdateMonths')?.value
+      .split(/[,\s]+/).map(s => parseInt(s.trim())).filter(n => !isNaN(n) && n >= 1 && n <= 12);
+
+    const data = {
+      originN:                parseInt(document.getElementById('cfgOriginN')?.value)       || null,
+      originCode:             document.getElementById('cfgOriginCode')?.value?.trim()       || null,
+      originTimestamp:        isNaN(originDate)  ? null : originDate,
+      currentName:            document.getElementById('cfgCurrentName')?.value?.trim()      || null,
+      currentCode:            document.getElementById('cfgCurrentCode')?.value?.trim()      || null,
+      currentTimestamp:       isNaN(currentDate) ? null : currentDate,
+      currentPatchNum:        parseInt(document.getElementById('cfgCurrentPatch')?.value)  || null,
+      updateMonths:           months.length ? months : UPDATE_MONTHS_DEFAULT,
+      updateDay:              parseInt(document.getElementById('cfgUpdateDay')?.value)      || UPDATE_DAY_DEFAULT,
+      maintenanceDaysBefore:  parseInt(document.getElementById('cfgMaintDays')?.value)      || MAINT_DAYS_DEFAULT,
+      updatedAt:              serverTimestamp(),
+    };
+
+    await setDoc(doc(db, 'config', 'roadmap'), data, { merge: true });
+    bootstrap.Modal.getInstance(document.getElementById('configEditorModal'))?.hide();
+  } catch (e) {
+    alert('Lỗi khi lưu: ' + e.message);
+  } finally {
+    if (btn) { btn.disabled = false; btn.innerHTML = '<i class="bi bi-floppy me-1"></i>Lưu cấu hình'; }
+  }
+};
+
+function tsToInputDate(ts) {
+  try {
+    const d = ts?.toDate?.() || (ts instanceof Date ? ts : null);
+    if (!d) return '';
+    return d.toISOString().slice(0, 10);
+  } catch { return ''; }
+}
+
+function setVal(id, val) {
+  const el = document.getElementById(id); if (el) el.value = val;
+}
+
+// ============================================================
+// CONFIG LOADER — lắng nghe Firestore realtime
+// ============================================================
+function listenConfig() {
+  const configRef = doc(db, 'config', 'roadmap');
+
+  // Hiển thị skeleton loading
+  showLoading(true);
+
+  onSnapshot(configRef, snap => {
+    if (snap.exists()) {
+      CFG = snap.data();
+    } else {
+      // Doc chưa tồn tại → CFG = null, trang hiển thị thông báo admin cần thiết lập
+      CFG = null;
+    }
+    showLoading(false);
+    renderAll();
+  }, err => {
+    console.error('Config load error:', err);
+    showLoading(false);
+    showConfigError(err);
+  });
+}
+
+function renderAll() {
+  if (!CFG) {
+    showNoConfig();
+    return;
+  }
+  updateCountdown();
+  buildTimeline();
+  buildCurrentVersionPanel();
+  buildAdminConfigBtn();
+}
+
+function showLoading(on) {
+  const el = document.getElementById('pageLoadingOverlay');
+  if (el) el.style.display = on ? 'flex' : 'none';
+}
+
+function showNoConfig() {
+  // Nếu là admin → gợi ý thiết lập; nếu không → thông báo đang chờ config
+  const hero = document.getElementById('heroSubtitle');
+  if (hero) hero.textContent = isAdmin
+    ? 'Chưa có cấu hình. Nhấn "Thiết lập cấu hình" để bắt đầu.'
+    : 'Đang chờ Admin thiết lập cấu hình roadmap...';
+
+  setText('heroVersion', '—');
+  setText('heroVersionCode', '—');
+  buildAdminConfigBtn();
+}
+
+function showConfigError(err) {
+  const isPermission = err?.code === 'permission-denied';
+
+  // Hero subtitle
+  const hero = document.getElementById('heroSubtitle');
+  if (hero) hero.textContent = isPermission
+    ? 'Không có quyền đọc cấu hình — xem hướng dẫn bên dưới'
+    : `Lỗi tải dữ liệu: ${err?.message || err}`;
+
+  // Hiện banner hướng dẫn fix
+  const banner = document.getElementById('permissionErrorBanner');
+  if (banner) {
+    banner.style.display = 'block';
+    if (!isPermission) {
+      // Lỗi khác — hiện message chung
+      banner.innerHTML = `
+        <div class="perm-banner-icon"><i class="bi bi-exclamation-triangle-fill"></i></div>
+        <div>
+          <div class="perm-banner-title">Lỗi tải cấu hình</div>
+          <div class="perm-banner-desc">${err?.message || err}</div>
+        </div>`;
+    }
+  }
+
+  // Vẫn render timeline/countdown với defaults để trang không trắng
+  CFG = null;
+  setText('heroVersion', '—');
+  setText('heroVersionCode', '—');
+  buildTimeline();
 }
 
 // ============================================================
@@ -353,37 +551,32 @@ const fmtDate = ts => {
 };
 
 const levelMap = {
-  hint:    { label: '🔮 Gợi ý nhỏ',      css: 'hint' },
-  partial: { label: '⚡ Rò rỉ một phần', css: 'partial' },
-  major:   { label: '🔥 Tiết lộ lớn',    css: 'major' },
+  hint:    { label: '🔮 Gợi ý nhỏ',       css: 'hint' },
+  partial: { label: '⚡ Rò rỉ một phần',  css: 'partial' },
+  major:   { label: '🔥 Tiết lộ lớn',     css: 'major' },
 };
 
 function loadLeaks() {
   const list = document.getElementById('leaksList');
   if (!list) return;
 
-  const q = query(collection(db, 'roadmap_leaks'), orderBy('createdAt', 'desc'));
-  onSnapshot(q, snap => {
+  onSnapshot(query(collection(db, 'roadmap_leaks'), orderBy('createdAt', 'desc')), snap => {
     if (snap.empty) {
       list.innerHTML = `
         <div class="leaks-empty">
           <i class="bi bi-lock" style="font-size:2.5rem;opacity:0.3;"></i>
           <div style="margin-top:12px;color:var(--text-secondary);">Chưa có rò rỉ nào được đăng</div>
           <div style="font-size:0.8rem;color:var(--text-secondary);margin-top:4px;">Admin sẽ tiết lộ sớm thôi!</div>
-        </div>
-      `;
+        </div>`;
       return;
     }
-
     list.innerHTML = '';
     snap.docs.forEach((docSnap, idx) => {
       const d  = docSnap.data();
       const lv = levelMap[d.level] || levelMap.hint;
-
       const card = document.createElement('div');
       card.className = `leak-card level-${lv.css}`;
       card.style.animationDelay = `${idx * 0.07}s`;
-
       card.innerHTML = `
         <div class="leak-header">
           <div class="leak-title">${esc(d.title || 'Rò rỉ')}</div>
@@ -394,28 +587,19 @@ function loadLeaks() {
           ${d.version ? `<span><i class="bi bi-tag me-1"></i>${esc(d.version)}</span>` : ''}
         </div>
         <div class="leak-content">${d.content || ''}</div>
-        ${isAdmin ? `
-          <div class="leak-admin-actions">
-            <button class="btn-leak-delete" data-id="${docSnap.id}">
-              <i class="bi bi-trash me-1"></i>Xóa
-            </button>
-          </div>
-        ` : ''}
+        ${isAdmin ? `<div class="leak-admin-actions">
+          <button class="btn-leak-delete" data-id="${docSnap.id}"><i class="bi bi-trash me-1"></i>Xóa</button>
+        </div>` : ''}
       `;
-
       if (isAdmin) {
         card.querySelector('.btn-leak-delete')?.addEventListener('click', () => {
-          if (confirm('Xóa rò rỉ này?')) {
-            deleteDoc(doc(db, 'roadmap_leaks', docSnap.id));
-          }
+          if (confirm('Xóa rò rỉ này?')) deleteDoc(doc(db, 'roadmap_leaks', docSnap.id));
         });
       }
-
       list.appendChild(card);
     });
   }, err => {
-    console.error('Leaks load error:', err);
-    list.innerHTML = `<div class="leaks-empty" style="color:var(--liquid-danger);">Lỗi tải dữ liệu: ${esc(err.message)}</div>`;
+    list.innerHTML = `<div class="leaks-empty" style="color:var(--liquid-danger);">Lỗi: ${esc(err.message)}</div>`;
   });
 }
 
@@ -432,34 +616,23 @@ window.openLeakEditor = function () {
 };
 
 window.submitLeak = async function () {
-  if (!currentUser || !isAdmin) { alert('Bạn không có quyền đăng rò rỉ!'); return; }
-
+  if (!currentUser || !isAdmin) { alert('Bạn không có quyền!'); return; }
   const title   = document.getElementById('leakTitle')?.value?.trim();
   const level   = document.getElementById('leakLevel')?.value;
   const version = document.getElementById('leakVersion')?.value?.trim();
   const content = leakQuill?.root?.innerHTML || '';
-
   if (!title) { alert('Vui lòng nhập tiêu đề!'); return; }
   if (leakQuill?.getText()?.trim().length < 5) { alert('Nội dung quá ngắn!'); return; }
-
   const btn = document.getElementById('btnSubmitLeak');
   if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Đang đăng...'; }
-
   try {
-    await addDoc(collection(db, 'roadmap_leaks'), {
-      title, level, version, content,
-      authorUid: currentUser.uid,
-      createdAt: serverTimestamp(),
-    });
-    document.getElementById('leakTitle').value  = '';
+    await addDoc(collection(db, 'roadmap_leaks'), { title, level, version, content, authorUid: currentUser.uid, createdAt: serverTimestamp() });
+    document.getElementById('leakTitle').value = '';
     document.getElementById('leakVersion').value = '';
     if (leakQuill) leakQuill.root.innerHTML = '';
     leakModal?.hide();
-  } catch (e) {
-    alert('Lỗi khi đăng: ' + e.message);
-  } finally {
-    if (btn) { btn.disabled = false; btn.innerHTML = '<i class="bi bi-send me-1"></i>Đăng rò rỉ'; }
-  }
+  } catch (e) { alert('Lỗi: ' + e.message); }
+  finally { if (btn) { btn.disabled = false; btn.innerHTML = '<i class="bi bi-send me-1"></i>Đăng rò rỉ'; } }
 };
 
 // ============================================================
@@ -467,44 +640,31 @@ window.submitLeak = async function () {
 // ============================================================
 async function checkAdmin(uid) {
   try {
-    const userDoc = await getDoc(doc(db, 'users', uid));
-    return userDoc.exists() && userDoc.data()?.type === 'admin';
+    const d = await getDoc(doc(db, 'users', uid));
+    return d.exists() && d.data()?.type === 'admin';
   } catch { return false; }
 }
 
 function updateMenuAuth(user) {
-  const area     = document.getElementById('menuAuthArea');
-  const userInfo = document.getElementById('menuUserInfo');
+  const area = document.getElementById('menuAuthArea');
   if (!area) return;
-
   if (user) {
     area.innerHTML = `
       <div style="display:flex;align-items:center;gap:10px;padding:10px;background:#f8f9fa;border-radius:12px;">
-        <img src="https://ui-avatars.com/api/?name=${encodeURIComponent(user.displayName||user.email||'U')}&background=007AFF&color=fff&size=40"
-             style="width:40px;height:40px;border-radius:50%;">
+        <img src="https://ui-avatars.com/api/?name=${encodeURIComponent(user.displayName||user.email||'U')}&background=007AFF&color=fff&size=40" style="width:40px;height:40px;border-radius:50%;">
         <div style="flex:1;min-width:0;">
           <div style="font-weight:700;font-size:0.9rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(user.displayName||user.email||'Người dùng')}</div>
           ${isAdmin ? '<div style="font-size:0.7rem;color:#FF9500;font-weight:700;">⭐ ADMIN</div>' : ''}
         </div>
         <button onclick="doLogout()" style="background:none;border:none;color:#dc3545;font-size:0.8rem;cursor:pointer;">Đăng xuất</button>
-      </div>
-    `;
-    if (userInfo) userInfo.textContent = user.uid;
+      </div>`;
+
   } else {
-    area.innerHTML = `
-      <button onclick="openLoginModal()" style="width:100%;padding:10px;background:linear-gradient(135deg,#0d6efd,#5856D6);color:white;border:none;border-radius:12px;font-weight:700;cursor:pointer;">
-        <i class="bi bi-person me-2"></i>Đăng nhập
-      </button>
-    `;
-    if (userInfo) userInfo.textContent = '';
+    area.innerHTML = `<button onclick="openLoginModal()" style="width:100%;padding:10px;background:linear-gradient(135deg,#0d6efd,#5856D6);color:white;border:none;border-radius:12px;font-weight:700;cursor:pointer;"><i class="bi bi-person me-2"></i>Đăng nhập</button>`;
   }
 }
 
-window.openLoginModal = function () {
-  const m = new bootstrap.Modal(document.getElementById('loginModal'));
-  m.show();
-};
-
+window.openLoginModal = () => new bootstrap.Modal(document.getElementById('loginModal')).show();
 window.doLogin = async function () {
   const email = document.getElementById('loginEmail')?.value?.trim();
   const pass  = document.getElementById('loginPassword')?.value;
@@ -513,26 +673,25 @@ window.doLogin = async function () {
   try {
     await signInWithEmailAndPassword(auth, email, pass);
     bootstrap.Modal.getInstance(document.getElementById('loginModal'))?.hide();
-  } catch {
-    if (errEl) errEl.textContent = 'Email hoặc mật khẩu không đúng.';
-  }
+  } catch { if (errEl) errEl.textContent = 'Email hoặc mật khẩu không đúng.'; }
 };
-
-window.doLogout = function () { signOut(auth); };
+window.doLogout = () => signOut(auth);
 
 // ============================================================
 // INIT
 // ============================================================
 onAuthStateChanged(auth, async user => {
   currentUser = user;
-  isAdmin = user ? await checkAdmin(user.uid) : false;
+  isAdmin     = user ? await checkAdmin(user.uid) : false;
   updateMenuAuth(user);
   const btnAddLeak = document.getElementById('btnAddLeak');
   if (btnAddLeak) btnAddLeak.style.display = isAdmin ? 'inline-flex' : 'none';
+  buildAdminConfigBtn();
   loadLeaks();
 });
 
-updateCountdown();
-setInterval(updateCountdown, 1000);
-buildTimeline();
-buildCurrentVersionPanel();
+// Bắt đầu lắng nghe config từ Firestore
+listenConfig();
+
+// Countdown refresh mỗi giây (chỉ chạy sau khi CFG đã có)
+setInterval(() => { if (CFG) updateCountdown(); }, 1000);
