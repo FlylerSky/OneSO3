@@ -1,11 +1,8 @@
-// JS/profile.js - Relife UI 1.2 ENHANCED
+// JS/profile.js - Relife UI 1.1 FINAL
 // ✅ Fixed comment counter (snapshot.size)
 // ✅ Removed increment logic
 // ✅ Display nested replies
 // 🆕 Avatar editor with preview
-// 🆕 Cover photo with customization
-// 🆕 Avatar frames system (3 free + 9 special)
-// 🆕 Achievement groups (Companionship)
 
 import { initFirebase } from '../firebase-config.js';
 import {
@@ -19,12 +16,6 @@ import {
 
 const db = initFirebase();
 const auth = getAuth();
-
-// Load avatar frames configuration
-let avatarFramesData = null;
-if (typeof AVATAR_FRAMES !== 'undefined') {
-  avatarFramesData = AVATAR_FRAMES;
-}
 
 // DOM refs
 const profileArea = document.getElementById('profileArea');
@@ -49,894 +40,141 @@ let quillEditor = null;
 
 // helpers
 const esc = s => String(s||'').replace(/[&<>\"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',"'":'&#39;'}[m]));
-const fmtDate = ts => { 
-  try { 
-    return ts?.toDate ? ts.toDate().toLocaleDateString('vi-VN', {year:'numeric',month:'2-digit',day:'2-digit'}) : '';
-  } catch { 
-    return ''; 
-  } 
-};
+const fmtDate = ts => { try { return ts?.toDate ? ts.toDate().toLocaleString('vi-VN') : ''; } catch { return ''; } };
 
-// State
+const params = new URLSearchParams(location.search);
+let profileUid = params.get('user');
 let currentUser = null;
 let userDoc = null;
-let profileUid = null;
+
 let postsUnsub = null;
 let commentsSubsCleanup = null;
-let selectedFrameId = 'none';
+let lastPostsDocs = [];
 
-// Parse URL
-const params = new URLSearchParams(location.search);
-const userParam = params.get('user');
-if(userParam) profileUid = userParam;
+// show loading
+function showLoading(){ 
+  profileArea.innerHTML = '<div id="profileLoading" class="text-center text-muted py-4">Đang tải...</div>'; 
+}
 
-// Quill config
-const QUILL_FORMATS = ['header','bold','italic','underline','strike','blockquote','code-block','list','link','image','video','align','color','background','font','size'];
-const QUILL_TOOLBAR = [
-  [{ header: [1, 2, 3, false] }],
-  ['bold', 'italic', 'underline', 'strike'],
-  [{ list: 'ordered'}, { list: 'bullet' }],
-  ['blockquote', 'code-block'],
-  ['link', 'image', 'video'],
-  [{ color: [] }, { background: [] }],
-  [{ align: [] }],
-  ['clean']
-];
-
+// quill init
 function ensureQuill(){
-  if(!quillEditor && document.getElementById('postEditor')){
-    quillEditor = new Quill('#postEditor', {
-      theme: 'snow',
-      modules: { toolbar: QUILL_TOOLBAR },
-      formats: QUILL_FORMATS,
-      placeholder: 'Viết nội dung...'
-    });
-  }
-}
-
-/* ========== COVER PHOTO & AVATAR FRAME RENDERING ========== */
-
-function renderProfileCoverAndAvatar(userDoc) {
-  if (!userDoc) return;
-  
-  const coverContainer = document.getElementById('profileCover');
-  const coverImage = document.getElementById('profileCoverImage');
-  const avatar = document.getElementById('profileAvatarImg');
-  const frameContainer = document.getElementById('profileAvatarFrame');
-  
-  if (!avatar) return;
-  
-  // Cover Photo
-  if (coverImage && userDoc.coverPhotoUrl) {
-    const settings = userDoc.coverPhotoSettings || { scale: 1, translateX: 0, translateY: 0 };
-    coverImage.src = userDoc.coverPhotoUrl;
-    coverImage.style.display = 'block';
-    coverImage.style.transform = `scale(${settings.scale}) translate(${settings.translateX}%, ${settings.translateY}%)`;
-  } else if (coverImage) {
-    coverImage.style.display = 'none';
-  }
-  
-  // Avatar
-  const avatarUrl = userDoc.avatarUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(userDoc.displayName || 'U')}&background=0D6EFD&color=fff&size=256`;
-  avatar.src = avatarUrl;
-  
-  if (userDoc.avatarSettings) {
-    const settings = userDoc.avatarSettings;
-    avatar.style.transform = `scale(${settings.scale || 1}) translate(${settings.translateX || 0}%, ${settings.translateY || 0}%)`;
-  }
-  
-  // Avatar Frame
-  if (frameContainer && userDoc.avatarFrame && avatarFramesData) {
-    const allFrames = [...avatarFramesData.free, ...avatarFramesData.special];
-    const frame = allFrames.find(f => f.id === userDoc.avatarFrame);
-    
-    if (frame && frame.image) {
-      const frameImg = frameContainer.querySelector('img');
-      if (frameImg) {
-        frameImg.src = frame.image;
-        frameContainer.style.display = 'block';
-      }
-    } else {
-      frameContainer.style.display = 'none';
+  if(quillEditor) return;
+  quillEditor = new Quill('#editorQuill', {
+    theme: 'snow',
+    modules: {
+      toolbar: [
+        [{ 'font': [] }, { 'size': ['small', false, 'large', 'huge'] }],
+        ['bold', 'italic', 'underline', 'strike'],
+        [{ 'color': [] }, { 'background': [] }],
+        [{ 'list': 'ordered' }, { 'list': 'bullet' }],
+        ['link', 'image', 'video'],
+        ['clean']
+      ]
     }
-  } else if (frameContainer) {
-    frameContainer.style.display = 'none';
-  }
+  });
 }
 
-/* ========== LOAD PROFILE ========== */
-
+// Load profile data
 async function loadProfile(uid){
+  showLoading();
+  // cleanup subs
+  if(postsUnsub){ postsUnsub(); postsUnsub = null; }
+  if(commentsSubsCleanup){ commentsSubsCleanup(); commentsSubsCleanup = null; }
+
   try {
-    const userSnap = await getDoc(doc(db, 'users', uid));
-    if(!userSnap.exists()){
-      profileArea.innerHTML = '<div class="text-center p-4">Không tìm thấy người dùng.</div>';
+    const uRef = doc(db,'users', uid);
+    const uSnap = await getDoc(uRef);
+    if(!uSnap.exists()){
+      profileArea.innerHTML = '<div class="text-center p-4 text-muted">Không tìm thấy người dùng</div>';
       return;
     }
-    
-    userDoc = { id: uid, ...userSnap.data() };
-    
-    // Update achievement status (auto-unlock frames) - only if createdAt exists
-    if (userDoc.createdAt) {
-      await updateAchievementStatus(uid, userDoc);
-      
-      // Reload userDoc after achievement update
-      const refreshSnap = await getDoc(doc(db, 'users', uid));
-      if (refreshSnap.exists()) {
-        userDoc = { id: uid, ...refreshSnap.data() };
-      }
+    userDoc = { id: uSnap.id, ...uSnap.data() };
+    const isOwner = currentUser && currentUser.uid === uid;
+    const avatar = userDoc.avatarUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(userDoc.displayName||'U')}&background=0D6EFD&color=fff&size=256`;
+
+    profileArea.innerHTML = `
+      <div class="profile-header">
+        <img src="${avatar}" alt="avatar" class="profile-avatar" id="profileAvatarImg">
+        <div class="profile-meta">
+          <div class="profile-name">
+            <div>${esc(userDoc.displayName || '(Không tên)')}</div>
+            <div class="profile-tag">${esc(userDoc.tagName || '')}</div>
+            <div id="profileActionArea" class="ms-2"></div>
+          </div>
+          <div class="profile-basic">
+            <div><i class="bi bi-gender-ambiguous"></i> ${esc(userDoc.gender || 'Chưa cập nhật')}</div>
+            <div><i class="bi bi-calendar-event"></i> ${esc(userDoc.birthday || 'Chưa cập nhật')}</div>
+            <div><i class="bi bi-geo-alt"></i> ${esc(userDoc.country || 'Chưa cập nhật')}</div>
+            ${isOwner?`<div id="profileEmailArea"><i class="bi bi-envelope"></i> ${esc(userDoc.email||'')}</div>`:''}
+          </div>
+          <div class="follow-stats mt-2">
+            <div class="stat">Followers: <span id="followersCount">${userDoc.followersCount||0}</span></div>
+            <div class="stat">Following: <span id="followingCount">${userDoc.followingCount||0}</span></div>
+          </div>
+        </div>
+      </div>
+      ${ userDoc.bio ? `<div class="profile-bio">${esc(userDoc.bio)}</div>` : `<div class="profile-bio text-muted">(Chưa có mô tả)</div>` }
+      <div id="editArea" class="profile-edit mt-3" style="display:none;"></div>
+      <div class="profile-posts mt-3">
+        <div class="d-flex align-items-center justify-content-between mb-2">
+          <h6 class="mb-0">Bài viết của ${esc(userDoc.displayName||'')}</h6>
+          <div id="ownerControls"></div>
+        </div>
+        <div id="userPostsList"><div class="text-muted py-3">Đang tải bài viết...</div></div>
+      </div>
+    `;
+
+    // owner controls & visitors menu visibility
+    const ownerControls = document.getElementById('ownerControls');
+    if(currentUser && currentUser.uid === uid){
+      ownerControls.innerHTML = `<button id="btnAddPost" class="btn btn-sm btn-primary btn-rounded"><i class="bi bi-plus-lg"></i> Thêm bài viết</button>`;
+      document.getElementById('btnAddPost').addEventListener('click', openAddPostEditor);
+      document.getElementById('openVisitorsBtn').style.display = 'block';
+    } else {
+      ownerControls.innerHTML = '';
+      document.getElementById('openVisitorsBtn').style.display = 'none';
     }
-    
-    // Render cover photo and avatar with frame
-    renderProfileCoverAndAvatar(userDoc);
-    
-    // Render profile info
-    const displayName = userDoc.displayName || userDoc.email || 'Người dùng';
-    const tagName = userDoc.tagName || '';
-    const bio = userDoc.bio || '';
-    const gender = userDoc.gender || '';
-    const birthday = userDoc.birthday || '';
-    const country = userDoc.country || '';
-    
-    const displayNameEl = document.getElementById('profileDisplayName');
-    const tagNameEl = document.getElementById('profileTagName');
-    const bioEl = document.getElementById('profileBio');
-    const basicInfoEl = document.getElementById('profileBasicInfo');
-    
-    if (displayNameEl) displayNameEl.textContent = displayName;
-    if (tagNameEl) tagNameEl.textContent = tagName ? `@${tagName}` : '';
-    if (bioEl) bioEl.textContent = bio || 'Chưa có giới thiệu';
-    
-    if (basicInfoEl) {
-      let infoHTML = '';
-      if(gender) infoHTML += `<div><i class="bi bi-gender-ambiguous"></i> ${esc(gender)}</div>`;
-      if(birthday) infoHTML += `<div><i class="bi bi-cake"></i> ${esc(birthday)}</div>`;
-      if(country) infoHTML += `<div><i class="bi bi-geo-alt"></i> ${esc(country)}</div>`;
-      basicInfoEl.innerHTML = infoHTML || '<div class="text-muted">Chưa có thông tin</div>';
-    }
-    
-    // Followers/Following counts
-    const followersCountEl = document.getElementById('profileFollowersCount');
-    const followingCountEl = document.getElementById('profileFollowingCount');
-    
-    if (followersCountEl) {
-      onSnapshot(collection(db,'users',uid,'followers'), snap => {
-        followersCountEl.textContent = snap.size;
-      });
-    }
-    
-    if (followingCountEl) {
-      onSnapshot(collection(db,'users',uid,'following'), snap => {
-        followingCountEl.textContent = snap.size;
-      });
-    }
-    
-    // Action area
+
+    // render follow action area
     await renderFollowActionArea(uid);
-    
-    // Update achievements button to show groups
-    if (openAchievementsBtn) {
-      openAchievementsBtn.onclick = () => {
-        renderAchievementsWithGroups(userDoc);
-        new bootstrap.Modal(document.getElementById('achievementsModal')).show();
-      };
-    }
-    
-    // Visitors button (only for owner)
-    if(openVisitorsBtn){
-      if(currentUser && currentUser.uid === uid){
-        openVisitorsBtn.style.display = 'inline-block';
-      } else {
-        openVisitorsBtn.style.display = 'none';
-      }
-    }
-    
-    // Record visitor
+
+    // render menu
+    renderMenuAuthArea();
+
+    // subscribe follower/following counts
+    subscribeFollowerCounts(uid);
+
+    // record visitor if viewer is logged in and not owner
     if(currentUser && currentUser.uid !== uid){
       try {
-        const visitorProfile = await getDoc(doc(db,'users', currentUser.uid));
-        const vData = visitorProfile.exists() ? visitorProfile.data() : null;
+        let visitorProfile = null;
+        try {
+          const vSnap = await getDoc(doc(db,'users',currentUser.uid));
+          if(vSnap.exists()) visitorProfile = vSnap.data();
+        } catch(e){ /* ignore */ }
+
         await setDoc(doc(db,'users',uid,'visitors', currentUser.uid), {
-          displayName: vData?.displayName || currentUser.displayName || null,
-          tagName: vData?.tagName || null,
-          avatarUrl: vData?.avatarUrl || currentUser.photoURL || null,
+          userId: currentUser.uid,
+          displayName: (visitorProfile && visitorProfile.displayName) ? visitorProfile.displayName : (currentUser.displayName || null),
+          tagName: (visitorProfile && visitorProfile.tagName) ? visitorProfile.tagName : null,
+          avatarUrl: (visitorProfile && visitorProfile.avatarUrl) ? visitorProfile.avatarUrl : (currentUser.photoURL || null),
           lastVisitedAt: serverTimestamp()
         }, { merge: true });
       } catch(e){
         console.warn('visitor record failed', e);
       }
     }
-    
-    // Subscribe posts
+
+    // subscribe posts
     subscribePosts(uid);
-    
+
   } catch(err){
     console.error('loadProfile error', err);
     profileArea.innerHTML = `<div class="text-center p-4 text-danger">Lỗi khi tải thông tin người dùng.</div>`;
   }
 }
 
-/* ========== ACHIEVEMENT SYSTEM ========== */
-
-async function updateAchievementStatus(uid, userDoc) {
-  if (!uid || !userDoc) {
-    console.warn('updateAchievementStatus: missing uid or userDoc');
-    return;
-  }
-  
-  const createdAt = userDoc.createdAt?.toDate?.() || (userDoc.createdAt ? new Date(userDoc.createdAt) : null);
-  if (!createdAt) {
-    console.warn('updateAchievementStatus: no createdAt date');
-    return;
-  }
-  
-  const now = new Date();
-  const elapsed = now - createdAt;
-  
-  const MS = {
-    day: 24 * 60 * 60 * 1000,
-    week: 7 * 24 * 60 * 60 * 1000,
-    month: 30 * 24 * 60 * 60 * 1000,
-    year: 365 * 24 * 60 * 60 * 1000
-  };
-  
-  const milestones = [
-    { key: '1_day', target: MS.day },
-    { key: '1_week', target: MS.week },
-    { key: '1_month', target: MS.month },
-    { key: '1_year', target: MS.year },
-    { key: '2_years', target: 2 * MS.year },
-    { key: '3_years', target: 3 * MS.year },
-    { key: '4_years', target: 4 * MS.year },
-    { key: '5_years', target: 5 * MS.year },
-    { key: '10_years', target: 10 * MS.year }
-  ];
-  
-  const achievementsData = userDoc.achievements?.companionship || {};
-  let needsUpdate = false;
-  const updates = {};
-  
-  milestones.forEach(ms => {
-    const completed = elapsed >= ms.target;
-    const existing = achievementsData[ms.key];
-    
-    if (completed && (!existing || !existing.completed)) {
-      updates[`achievements.companionship.${ms.key}`] = {
-        completed: true,
-        completedAt: serverTimestamp()
-      };
-      needsUpdate = true;
-    }
-  });
-  
-  if (needsUpdate) {
-    try {
-      await updateDoc(doc(db, 'users', uid), updates);
-      console.log('✅ Achievements updated');
-    } catch (err) {
-      console.error('Achievement update error:', err);
-    }
-  }
-}
-
-function renderAchievementsWithGroups(userDoc) {
-  if (!achievementsContainer) return;
-  
-  try {
-    const createdAt = userDoc.createdAt?.toDate?.() || (userDoc.createdAt ? new Date(userDoc.createdAt) : null);
-    const now = new Date();
-    const elapsed = createdAt ? now - createdAt : 0;
-  
-  const MS = {
-    day: 24 * 60 * 60 * 1000,
-    week: 7 * 24 * 60 * 60 * 1000,
-    month: 30 * 24 * 60 * 60 * 1000,
-    year: 365 * 24 * 60 * 60 * 1000
-  };
-  
-  const milestones = [
-    { key: '1_day', label: '1 Ngày', target: MS.day, reward: 'bronze_star' },
-    { key: '1_week', label: '1 Tuần', target: MS.week, reward: 'emerald_ring' },
-    { key: '1_month', label: '1 Tháng', target: MS.month, reward: 'sapphire_crown' },
-    { key: '1_year', label: '1 Năm', target: MS.year, reward: 'ruby_flame' },
-    { key: '2_years', label: '2 Năm', target: 2 * MS.year, reward: 'amethyst_shield' },
-    { key: '3_years', label: '3 Năm', target: 3 * MS.year, reward: 'diamond_halo' },
-    { key: '4_years', label: '4 Năm', target: 4 * MS.year, reward: 'platinum_wings' },
-    { key: '5_years', label: '5 Năm', target: 5 * MS.year, reward: 'mythic_aurora' },
-    { key: '10_years', label: '10 Năm', target: 10 * MS.year, reward: 'eternal_galaxy' },
-    { key: 'infinite', label: 'Năm vô hạn', target: 10 * MS.year, reward: null }
-  ];
-  
-  let completedCount = 0;
-  const totalCount = milestones.length;
-  
-  const achievementItems = milestones.map(ms => {
-    let pct = 0;
-    let completed = false;
-    let subtitle = '';
-    
-    if (!createdAt) {
-      subtitle = 'Chưa có dữ liệu';
-    } else {
-      if (ms.key === 'infinite') {
-        const years = Math.floor(elapsed / MS.year);
-        const intoYear = elapsed - (years * MS.year);
-        pct = (intoYear / MS.year) * 100;
-        subtitle = `Đã đồng hành ${years} năm — ${Math.round(pct)}% tiến trình năm tiếp theo`;
-      } else {
-        pct = Math.min(100, (elapsed / ms.target) * 100);
-        completed = pct >= 100;
-        subtitle = completed 
-          ? `✓ Đã hoàn thành` 
-          : `${Math.round(pct)}% - còn ${formatTimeRemaining(ms.target - elapsed)}`;
-      }
-    }
-    
-    if (completed) completedCount++;
-    
-    // Get frame info for reward
-    let rewardInfo = '';
-    if (ms.reward && avatarFramesData) {
-      const allFrames = [...avatarFramesData.free, ...avatarFramesData.special];
-      const frame = allFrames.find(f => f.id === ms.reward);
-      if (frame) {
-        rewardInfo = `
-          <div class="achievement-reward-badge">
-            <i class="bi bi-award-fill"></i> Phần thưởng: ${frame.name}
-          </div>
-        `;
-      }
-    }
-    
-    return `
-      <div class="col-12">
-        <div class="achievement-card ${completed ? 'completed' : ''}">
-          <div class="d-flex justify-content-between align-items-start">
-            <div>
-              <div class="achievement-title">
-                ${completed ? '<i class="bi bi-check-circle-fill text-success"></i>' : '<i class="bi bi-hourglass-split"></i>'}
-                ${ms.label}
-              </div>
-              <div class="achievement-meta">${subtitle}</div>
-              ${rewardInfo}
-            </div>
-            <div>
-              <i class="bi bi-award-fill fs-3 ${completed ? 'text-success' : 'text-muted'}"></i>
-            </div>
-          </div>
-          <div class="achievement-bar">
-            <div class="achievement-progress" style="width: ${Math.max(0, Math.min(100, Math.round(pct)))}%"></div>
-          </div>
-        </div>
-      </div>
-    `;
-  }).join('');
-  
-  const progressPct = Math.round((completedCount / totalCount) * 100);
-  
-  achievementsContainer.innerHTML = `
-    <div class="achievement-groups-container">
-      <div class="achievement-group expanded" id="companionshipGroup">
-        <div class="achievement-group-header" onclick="toggleAchievementGroup('companionshipGroup')">
-          <div class="achievement-group-title-section">
-            <div class="achievement-group-icon">
-              <i class="bi bi-heart-fill text-white"></i>
-            </div>
-            <div class="achievement-group-info">
-              <h4>Đồng hành</h4>
-              <p>Thành tích về thời gian đồng hành cùng Relife</p>
-            </div>
-          </div>
-          
-          <div class="achievement-group-stats">
-            <div class="achievement-progress-circle">
-              <svg width="60" height="60">
-                <circle cx="30" cy="30" r="25" fill="none" stroke="#eef2ff" stroke-width="5"/>
-                <circle cx="30" cy="30" r="25" fill="none" stroke="#0d6efd" stroke-width="5"
-                        stroke-dasharray="${2 * Math.PI * 25}" 
-                        stroke-dashoffset="${2 * Math.PI * 25 * (1 - progressPct / 100)}"
-                        transform="rotate(-90 30 30)"/>
-              </svg>
-              <div class="achievement-progress-text">${progressPct}%</div>
-            </div>
-            <div>
-              <div style="font-weight: 700; font-size: 1.1rem;">${completedCount}/${totalCount}</div>
-              <div style="font-size: 0.85rem; color: #6c757d;">Hoàn thành</div>
-            </div>
-            <i class="bi bi-chevron-down achievement-expand-icon"></i>
-          </div>
-        </div>
-        
-        <div class="achievement-group-content">
-          <div class="achievement-items-grid">
-            ${achievementItems}
-          </div>
-        </div>
-      </div>
-    </div>
-  `;
-  } catch (err) {
-    console.error('renderAchievementsWithGroups error:', err);
-    achievementsContainer.innerHTML = `
-      <div class="alert alert-danger">
-        Lỗi khi hiển thị thành tích. Vui lòng thử lại sau.
-      </div>
-    `;
-  }
-}
-
-window.toggleAchievementGroup = function(groupId) {
-  const group = document.getElementById(groupId);
-  if (group) {
-    group.classList.toggle('expanded');
-  }
-};
-
-function formatTimeRemaining(ms) {
-  const days = Math.floor(ms / (24 * 60 * 60 * 1000));
-  const hours = Math.floor((ms % (24 * 60 * 60 * 1000)) / (60 * 60 * 1000));
-  
-  if (days > 365) {
-    const years = Math.floor(days / 365);
-    return `${years} năm`;
-  } else if (days > 30) {
-    const months = Math.floor(days / 30);
-    return `${months} tháng`;
-  } else if (days > 0) {
-    return `${days} ngày`;
-  } else {
-    return `${hours} giờ`;
-  }
-}
-
-/* ========== EDIT FORM WITH COVER & FRAMES ========== */
-
-function showEditForm(profile, uid) {
-  const editArea = document.getElementById('editArea');
-  if (!editArea) return;
-  
-  editArea.style.display = 'block';
-  
-  const currentFrame = profile.avatarFrame || 'none';
-  const coverSettings = profile.coverPhotoSettings || { scale: 1, translateX: 0, translateY: 0 };
-  const avatarSettings = profile.avatarSettings || { scale: 1, translateX: 0, translateY: 0 };
-  
-  // Calculate unlocked frames
-  const achievements = profile.achievements?.companionship || {};
-  const unlockedFrames = [];
-  
-  if (avatarFramesData) {
-    const allFrames = [...avatarFramesData.free, ...avatarFramesData.special];
-    allFrames.forEach(frame => {
-      if (frame.type === 'free') {
-        unlockedFrames.push(frame.id);
-      } else if (frame.requirement && achievements[frame.requirement]?.completed) {
-        unlockedFrames.push(frame.id);
-      }
-    });
-  }
-  
-  selectedFrameId = currentFrame;
-  
-  const currentAvatar = profile.avatarUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(profile.displayName||'U')}&background=0D6EFD&color=fff&size=256`;
-  
-  editArea.innerHTML = `
-    <form id="profileEditForm" class="p-3 border rounded bg-white">
-      <h6 class="mb-3 fw-bold">
-        <i class="bi bi-person-gear me-2"></i>Chỉnh sửa thông tin cá nhân
-      </h6>
-      
-      <!-- Cover Photo Section -->
-      <div class="cover-editor-section mb-4">
-        <h6 class="mb-3"><i class="bi bi-image"></i> Ảnh bìa</h6>
-        
-        <div class="cover-preview-container">
-          <img id="coverPreview" class="cover-preview-image" 
-               src="${profile.coverPhotoUrl || ''}" 
-               style="display: ${profile.coverPhotoUrl ? 'block' : 'none'}; transform: scale(${coverSettings.scale}) translate(${coverSettings.translateX}%, ${coverSettings.translateY}%);">
-        </div>
-        
-        <div class="mb-3">
-          <label class="form-label">URL ảnh bìa</label>
-          <input type="url" class="form-control" id="editCoverUrl" 
-                 value="${profile.coverPhotoUrl || ''}" 
-                 placeholder="https://example.com/cover.jpg">
-          <small class="form-text text-muted">Kích thước đề xuất: 1200x280px</small>
-        </div>
-        
-        <div class="cover-controls">
-          <div class="cover-control-group">
-            <label class="cover-control-label">
-              <i class="bi bi-zoom-in"></i> Phóng to/Thu nhỏ: <span id="coverScaleValue">${Math.round(coverSettings.scale * 100)}%</span>
-            </label>
-            <input type="range" class="cover-slider" id="coverScale" 
-                   min="0.5" max="2" step="0.1" value="${coverSettings.scale}">
-          </div>
-          
-          <div class="cover-control-group">
-            <label class="cover-control-label">
-              <i class="bi bi-arrow-left-right"></i> Di chuyển ngang: <span id="coverXValue">${coverSettings.translateX}%</span>
-            </label>
-            <input type="range" class="cover-slider" id="coverTranslateX" 
-                   min="-100" max="100" step="5" value="${coverSettings.translateX}">
-          </div>
-          
-          <div class="cover-control-group">
-            <label class="cover-control-label">
-              <i class="bi bi-arrow-down-up"></i> Di chuyển dọc: <span id="coverYValue">${coverSettings.translateY}%</span>
-            </label>
-            <input type="range" class="cover-slider" id="coverTranslateY" 
-                   min="-100" max="100" step="5" value="${coverSettings.translateY}">
-          </div>
-          
-          <div class="cover-control-group">
-            <button type="button" class="btn btn-sm btn-outline-secondary w-100" id="resetCoverBtn">
-              <i class="bi bi-arrow-counterclockwise"></i> Đặt lại
-            </button>
-          </div>
-        </div>
-      </div>
-      
-      <!-- Avatar Frame Selector -->
-      <div class="avatar-frame-selector mb-4">
-        <h6 class="frame-selector-title">
-          <i class="bi bi-award"></i> Khung avatar
-        </h6>
-        
-        <div class="frame-grid" id="frameGrid">
-          ${renderFrameOptions(currentFrame, unlockedFrames, profile)}
-        </div>
-      </div>
-      
-      <!-- Avatar Editor -->
-      <div class="mb-3">
-        <label class="form-label fw-bold">
-          <i class="bi bi-image me-1"></i>Ảnh đại diện
-        </label>
-        <div class="d-flex gap-3 align-items-start avatar-editor-container">
-          <div>
-            <img id="avatarPreview" src="${currentAvatar}" 
-                 class="rounded-circle" 
-                 style="width:120px;height:120px;object-fit:cover;border:3px solid #dee2e6;"
-                 alt="avatar preview">
-          </div>
-          <div class="flex-fill">
-            <input 
-              id="editAvatarUrl" 
-              type="url"
-              class="form-control mb-2" 
-              placeholder="https://example.com/avatar.jpg"
-              value="${profile.avatarUrl || ''}">
-            <div class="form-note mb-2">
-              <i class="bi bi-info-circle me-1"></i>
-              Nhập URL ảnh từ internet (imgur.com, ibb.co, v.v.).
-            </div>
-          </div>
-        </div>
-      </div>
-      
-      <!-- Other fields -->
-      <div class="mb-3">
-        <label class="form-label fw-bold">
-          <i class="bi bi-person me-1"></i>Tên hiển thị
-        </label>
-        <input 
-          id="editDisplayName" 
-          type="text" 
-          class="form-control" 
-          value="${esc(profile.displayName || '')}" 
-          placeholder="Tên của bạn">
-      </div>
-      
-      <div class="mb-3">
-        <label class="form-label fw-bold">
-          <i class="bi bi-at me-1"></i>Tên người dùng (TagName)
-        </label>
-        <input 
-          id="editTagName" 
-          type="text" 
-          class="form-control" 
-          value="${esc(profile.tagName || '')}" 
-          placeholder="username">
-        <div class="form-note">
-          <i class="bi bi-info-circle me-1"></i>
-          Tên này sẽ hiển thị là @username
-        </div>
-      </div>
-      
-      <div class="mb-3">
-        <label class="form-label fw-bold">
-          <i class="bi bi-file-text me-1"></i>Giới thiệu bản thân
-        </label>
-        <textarea 
-          id="editBio" 
-          class="form-control" 
-          rows="3" 
-          placeholder="Viết một vài điều về bản thân...">${esc(profile.bio || '')}</textarea>
-      </div>
-      
-      <div class="row g-2 mb-3">
-        <div class="col-md-4">
-          <label class="form-label">Giới tính</label>
-          <select id="editGender" class="form-select">
-            <option value="">Không chọn</option>
-            <option value="Nam" ${profile.gender === 'Nam' ? 'selected' : ''}>Nam</option>
-            <option value="Nữ" ${profile.gender === 'Nữ' ? 'selected' : ''}>Nữ</option>
-            <option value="Khác" ${profile.gender === 'Khác' ? 'selected' : ''}>Khác</option>
-          </select>
-        </div>
-        <div class="col-md-4">
-          <label class="form-label">Ngày sinh</label>
-          <input 
-            id="editBirthday" 
-            type="date" 
-            class="form-control" 
-            value="${profile.birthday || ''}">
-        </div>
-        <div class="col-md-4">
-          <label class="form-label">Quốc gia</label>
-          <input 
-            id="editCountry" 
-            type="text" 
-            class="form-control" 
-            value="${esc(profile.country || '')}" 
-            placeholder="Việt Nam">
-        </div>
-      </div>
-      
-      <div class="d-flex gap-2 editor-buttons">
-        <button type="submit" class="btn btn-primary">
-          <i class="bi bi-check-lg me-1"></i>Lưu thay đổi
-        </button>
-        <button type="button" class="btn btn-outline-secondary" id="cancelEditBtn">
-          <i class="bi bi-x-lg me-1"></i>Hủy
-        </button>
-      </div>
-      
-      <div id="editMessage" class="mt-3"></div>
-    </form>
-  `;
-  
-  // Event listeners
-  setupEditFormEventListeners(uid, profile);
-}
-
-function renderFrameOptions(selectedFrame, unlockedFrames, profile) {
-  if (!avatarFramesData) return '';
-  
-  const allFrames = [...avatarFramesData.free, ...avatarFramesData.special];
-  const avatarUrl = profile.avatarUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(profile.displayName || 'U')}&background=0D6EFD&color=fff&size=64`;
-  
-  return allFrames.map(frame => {
-    const isUnlocked = unlockedFrames.includes(frame.id);
-    const isSelected = frame.id === selectedFrame;
-    const classes = `frame-option ${isSelected ? 'selected' : ''} ${!isUnlocked ? 'locked' : ''}`;
-    
-    return `
-      <div class="${classes}" data-frame-id="${frame.id}" ${isUnlocked ? `onclick="window.selectFrame('${frame.id}')"` : ''}>
-        <div class="frame-preview-wrapper">
-          <img class="frame-preview-avatar" src="${avatarUrl}" alt="Avatar">
-          ${frame.image ? `<img class="frame-preview-border" src="${frame.image}" alt="${frame.name}">` : ''}
-        </div>
-        ${!isUnlocked ? `
-          <div class="frame-lock-icon">
-            <i class="bi bi-lock-fill"></i>
-          </div>
-        ` : ''}
-        <div class="frame-name">
-          ${frame.name}
-          ${!isUnlocked && frame.requirementText ? `
-            <div class="frame-unlock-requirement">${frame.requirementText}</div>
-          ` : ''}
-        </div>
-        ${!isUnlocked ? `
-          <div class="frame-tooltip">Hoàn thành thành tích "${frame.requirementText}" để mở khóa</div>
-        ` : ''}
-      </div>
-    `;
-  }).join('');
-}
-
-window.selectFrame = function(frameId) {
-  selectedFrameId = frameId;
-  
-  // Update UI
-  document.querySelectorAll('.frame-option').forEach(opt => {
-    opt.classList.remove('selected');
-  });
-  const selected = document.querySelector(`[data-frame-id="${frameId}"]`);
-  if (selected) {
-    selected.classList.add('selected');
-  }
-};
-
-function setupEditFormEventListeners(uid, profile) {
-  // Cover photo URL change
-  const editCoverUrl = document.getElementById('editCoverUrl');
-  const coverPreview = document.getElementById('coverPreview');
-  
-  if (editCoverUrl && coverPreview) {
-    editCoverUrl.addEventListener('input', (e) => {
-      const url = e.target.value.trim();
-      
-      if (url) {
-        coverPreview.src = url;
-        coverPreview.style.display = 'block';
-      } else {
-        coverPreview.style.display = 'none';
-      }
-    });
-  }
-  
-  // Cover controls
-  const coverScale = document.getElementById('coverScale');
-  const coverTranslateX = document.getElementById('coverTranslateX');
-  const coverTranslateY = document.getElementById('coverTranslateY');
-  
-  function updateCoverPreview() {
-    if (!coverPreview) return;
-    const scale = coverScale?.value || 1;
-    const x = coverTranslateX?.value || 0;
-    const y = coverTranslateY?.value || 0;
-    
-    coverPreview.style.transform = `scale(${scale}) translate(${x}%, ${y}%)`;
-  }
-  
-  if (coverScale) {
-    coverScale.addEventListener('input', (e) => {
-      const val = e.target.value;
-      const scaleValue = document.getElementById('coverScaleValue');
-      if (scaleValue) {
-        scaleValue.textContent = Math.round(val * 100) + '%';
-      }
-      updateCoverPreview();
-    });
-  }
-  
-  if (coverTranslateX) {
-    coverTranslateX.addEventListener('input', (e) => {
-      const xValue = document.getElementById('coverXValue');
-      if (xValue) {
-        xValue.textContent = e.target.value + '%';
-      }
-      updateCoverPreview();
-    });
-  }
-  
-  if (coverTranslateY) {
-    coverTranslateY.addEventListener('input', (e) => {
-      const yValue = document.getElementById('coverYValue');
-      if (yValue) {
-        yValue.textContent = e.target.value + '%';
-      }
-      updateCoverPreview();
-    });
-  }
-  
-  // Reset cover button
-  const resetCoverBtn = document.getElementById('resetCoverBtn');
-  if (resetCoverBtn) {
-    resetCoverBtn.addEventListener('click', () => {
-      if (coverScale) coverScale.value = 1;
-      if (coverTranslateX) coverTranslateX.value = 0;
-      if (coverTranslateY) coverTranslateY.value = 0;
-      
-      const scaleValue = document.getElementById('coverScaleValue');
-      const xValue = document.getElementById('coverXValue');
-      const yValue = document.getElementById('coverYValue');
-      
-      if (scaleValue) scaleValue.textContent = '100%';
-      if (xValue) xValue.textContent = '0%';
-      if (yValue) yValue.textContent = '0%';
-      
-      updateCoverPreview();
-    });
-  }
-  
-  // Avatar preview
-  const editAvatarUrl = document.getElementById('editAvatarUrl');
-  const avatarPreview = document.getElementById('avatarPreview');
-  
-  if (editAvatarUrl && avatarPreview) {
-    editAvatarUrl.addEventListener('input', (e) => {
-      const url = e.target.value.trim();
-      if (url) {
-        avatarPreview.src = url;
-      }
-    });
-  }
-  
-  // Form submit
-  const form = document.getElementById('profileEditForm');
-  if (form) {
-    form.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      await saveProfileEdits(uid, profile);
-    });
-  }
-  
-  // Cancel button
-  const cancelBtn = document.getElementById('cancelEditBtn');
-  if (cancelBtn) {
-    cancelBtn.addEventListener('click', () => {
-      const editArea = document.getElementById('editArea');
-      if (editArea) {
-        editArea.style.display = 'none';
-      }
-    });
-  }
-}
-
-async function saveProfileEdits(uid, oldProfile) {
-  const editMsg = document.getElementById('editMessage');
-  if (!editMsg) return;
-  
-  editMsg.textContent = '⏳ Đang lưu...';
-  editMsg.className = 'alert alert-info';
-  
-  try {
-    const newDisplayName = document.getElementById('editDisplayName')?.value.trim() || oldProfile.displayName;
-    const newTagName = document.getElementById('editTagName')?.value.trim() || null;
-    const newBio = document.getElementById('editBio')?.value.trim() || null;
-    const newAvatarUrl = document.getElementById('editAvatarUrl')?.value.trim() || null;
-    const newGender = document.getElementById('editGender')?.value || null;
-    const newBirthday = document.getElementById('editBirthday')?.value || null;
-    const newCountry = document.getElementById('editCountry')?.value.trim() || null;
-    
-    const updates = {
-      displayName: newDisplayName,
-      tagName: newTagName,
-      bio: newBio,
-      avatarUrl: newAvatarUrl,
-      gender: newGender,
-      birthday: newBirthday,
-      country: newCountry,
-      coverPhotoUrl: document.getElementById('editCoverUrl')?.value.trim() || null,
-      coverPhotoSettings: {
-        scale: parseFloat(document.getElementById('coverScale')?.value || 1),
-        translateX: parseInt(document.getElementById('coverTranslateX')?.value || 0),
-        translateY: parseInt(document.getElementById('coverTranslateY')?.value || 0)
-      },
-      avatarFrame: selectedFrameId === 'none' ? null : selectedFrameId,
-      updatedAt: serverTimestamp()
-    };
-    
-    await updateDoc(doc(db, 'users', uid), updates);
-    
-    editMsg.textContent = '✅ Đã lưu thành công!';
-    editMsg.className = 'alert alert-success';
-    
-    // Update main avatar immediately
-    const mainAvatar = document.getElementById('profileAvatarImg');
-    if (mainAvatar) {
-      mainAvatar.src = newAvatarUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(newDisplayName)}&background=0D6EFD&color=fff&size=256`;
-    }
-    
-    // Propagate to posts and comments
-    if (newDisplayName !== oldProfile.displayName) {
-      editMsg.textContent = '✅ Đã lưu! Đang cập nhật bài viết và bình luận...';
-      await propagateProfileToPostsAndComments(uid, { displayName: newDisplayName });
-    }
-    
-    // Reload profile
-    await loadProfile(uid);
-    
-    setTimeout(() => {
-      const editArea = document.getElementById('editArea');
-      if (editArea) {
-        editArea.style.display = 'none';
-      }
-    }, 1500);
-    
-  } catch (err) {
-    console.error('Save error:', err);
-    editMsg.textContent = '❌ Lỗi: ' + err.message;
-    editMsg.className = 'alert alert-danger';
-  }
-}
-
-/* ========== HELPER FUNCTIONS ========== */
-
+// helper avatar builder
 function userAvatarUrlFor(user){
   if(!user) return '';
   if(user.photoURL) return user.photoURL;
@@ -945,6 +183,7 @@ function userAvatarUrlFor(user){
   return `https://ui-avatars.com/api/?name=U&background=0D6EFD&color=fff&size=120`;
 }
 
+// render follow action area
 async function renderFollowActionArea(profileId){
   const actionArea = document.getElementById('profileActionArea');
   if(!actionArea) return;
@@ -966,237 +205,495 @@ async function renderFollowActionArea(profileId){
     const fSnap = await getDoc(doc(db,'users',profileId,'followers', currentUser.uid));
     const isFollowing = fSnap.exists();
     const btnHtml = isFollowing
-      ? `<button onclick="window.doUnfollow('${profileId}')" class="btn btn-sm btn-outline-secondary btn-rounded">Đang theo dõi</button>`
-      : `<button onclick="window.doFollow('${profileId}')" class="btn btn-sm btn-primary btn-rounded">Theo dõi</button>`;
+      ? `<button id="btnUnfollow" class="btn btn-sm btn-outline-danger btn-rounded">Đang theo dõi · Hủy</button>`
+      : `<button id="btnFollow" class="btn btn-sm btn-primary btn-rounded">Theo dõi</button>`;
     actionArea.innerHTML = btnHtml;
+    if(isFollowing){
+      document.getElementById('btnUnfollow').addEventListener('click', ()=> doUnfollow(profileId));
+    } else {
+      document.getElementById('btnFollow').addEventListener('click', ()=> doFollow(profileId));
+    }
   } catch(e){
     console.error('renderFollowActionArea error', e);
-    actionArea.innerHTML = `<button class="btn btn-sm btn-outline-secondary btn-rounded disabled">Lỗi</button>`;
   }
 }
 
-window.doFollow = async function(profileId){
-  if(!currentUser) return;
+// doFollow
+async function doFollow(profileId){
+  if(!currentUser){ loginModalProfile.show(); return; }
+
+  const followerRef = doc(db,'users',profileId,'followers', currentUser.uid);
+  const followingRef = doc(db,'users',currentUser.uid,'following', profileId);
+
   try {
-    await setDoc(doc(db,'users',profileId,'followers', currentUser.uid), {
+    await setDoc(followerRef, {
+      userId: currentUser.uid,
+      createdAt: serverTimestamp(),
       displayName: currentUser.displayName || null,
-      createdAt: serverTimestamp()
+      tagName: null,
+      avatarUrl: (currentUser.photoURL || null)
     });
-    await setDoc(doc(db,'users', currentUser.uid,'following', profileId), {
-      displayName: userDoc?.displayName || null,
-      createdAt: serverTimestamp()
-    });
-    await renderFollowActionArea(profileId);
-  } catch(e){
-    console.error('doFollow error', e);
-    alert('Không thể theo dõi');
+  } catch(err){
+    console.error('doFollow: failed to create follower doc', err);
+    alert('Không thể tạo record follower. Kiểm tra Rules.');
+    return;
   }
-};
 
-window.doUnfollow = async function(profileId){
-  if(!currentUser) return;
+  let profileDisplay = userDoc && userDoc.displayName ? userDoc.displayName : null;
+  let profileAvatar = userDoc && userDoc.avatarUrl ? userDoc.avatarUrl : null;
+
   try {
-    await deleteDoc(doc(db,'users',profileId,'followers', currentUser.uid));
-    await deleteDoc(doc(db,'users', currentUser.uid,'following', profileId));
-    await renderFollowActionArea(profileId);
-  } catch(e){
-    console.error('doUnfollow error', e);
-    alert('Không thể bỏ theo dõi');
+    await setDoc(followingRef, {
+      userId: profileId,
+      createdAt: serverTimestamp(),
+      displayName: profileDisplay,
+      avatarUrl: profileAvatar
+    });
+  } catch(err){
+    console.error('doFollow: failed to create following doc', err);
+    try { await deleteDoc(followerRef); } catch(e){ console.warn('rollback failed', e); }
+    alert('Không thể tạo record following.');
+    return;
   }
-};
 
-/* ========== POSTS SUBSCRIPTION ========== */
+  try { await renderFollowActionArea(profileId); } catch(e){}
+}
 
+// doUnfollow
+async function doUnfollow(profileId){
+  if(!currentUser){ loginModalProfile.show(); return; }
+  const followerRef = doc(db,'users',profileId,'followers', currentUser.uid);
+  const followingRef = doc(db,'users',currentUser.uid,'following', profileId);
+
+  try { await deleteDoc(followingRef); } catch(err){ console.warn('unfollow: delete following failed', err); }
+  try { await deleteDoc(followerRef); } catch(err){ console.warn('unfollow: delete follower failed', err); }
+
+  try { await renderFollowActionArea(profileId); } catch(e){}
+}
+
+// subscribe follower/following counts
+function subscribeFollowerCounts(uid){
+  try {
+    const followersColl = collection(db,'users',uid,'followers');
+    const followingColl = collection(db,'users',uid,'following');
+
+    onSnapshot(followersColl, snap => {
+      const el = document.getElementById('followersCount');
+      if(el) el.textContent = snap.size;
+    }, err => { console.warn('followers snap error', err); });
+
+    onSnapshot(followingColl, snap => {
+      const el2 = document.getElementById('followingCount');
+      if(el2) el2.textContent = snap.size;
+    }, err => { console.warn('following snap error', err); });
+
+  } catch(e){
+    console.warn('subscribeFollowerCounts failed', e);
+  }
+}
+
+// subscribe posts realtime
 function subscribePosts(uid){
-  if(postsUnsub) postsUnsub();
-  const postsArea = document.getElementById('profilePostsArea');
-  if(!postsArea) return;
+  if(postsUnsub){ postsUnsub(); postsUnsub = null; }
+  try {
+    const postsQ = query(collection(db,'posts'), where('userId','==', uid), orderBy('createdAt','desc'));
+    postsUnsub = onSnapshot(postsQ, snap => {
+      lastPostsDocs = snap.docs;
+      renderPostsSnapshot(snap.docs);
+    }, err => {
+      console.error('subscribePosts error', err);
+      const listEl = document.getElementById('userPostsList');
+      if(listEl) listEl.innerHTML = `<div class="text-muted py-3">Không thể tải bài viết.</div>`;
+    });
+  } catch(e){
+    console.error('subscribePosts failed', e);
+  }
+}
 
-  const q = query(collection(db,'posts'), where('userId','==', uid), orderBy('createdAt','desc'));
-  postsUnsub = onSnapshot(q, snap => {
-    if(snap.empty){
-      postsArea.innerHTML = '<div class="text-center p-4 text-muted">Chưa có bài viết nào</div>';
-      return;
+// ✅ NEW: Fetch comment counts for multiple posts (parallel)
+async function fetchCommentCountsForPosts(postIds) {
+  const counts = {};
+  
+  await Promise.all(
+    postIds.map(async postId => {
+      try {
+        const snap = await getDocs(
+          collection(db, 'posts', postId, 'comments')
+        );
+        counts[postId] = snap.size;  // ✅ snapshot.size = accurate count
+      } catch(e) {
+        console.warn('fetch comment count failed for', postId, e);
+        counts[postId] = 0;
+      }
+    })
+  );
+  
+  return counts;
+}
+
+// ✅ UPDATED: render posts with accurate comment counts
+async function renderPostsSnapshot(docs){
+  const listEl = document.getElementById('userPostsList');
+  if(!listEl) return;
+  if(!docs.length){ 
+    listEl.innerHTML = `<div class="text-muted py-3">Người dùng chưa có bài viết nào.</div>`; 
+    return; 
+  }
+
+  // ✅ Fetch all comment counts in parallel
+  const postIds = docs.map(d => d.id);
+  const commentCounts = await fetchCommentCountsForPosts(postIds);
+
+  const frag = document.createDocumentFragment();
+  
+  docs.forEach(docSnap => {
+    const d = docSnap.data(); 
+    const id = docSnap.id;
+    const commentCount = commentCounts[id] || 0;  // ✅ From snapshot.size
+    
+    const card = document.createElement('div');
+    card.className = 'card card-post p-3';
+
+    const authorHtml = d.userId 
+      ? `<div class="fw-bold">${esc(d.displayName||'')}</div><div class="small-muted">${esc(d.authorTag||'')}</div>` 
+      : `<div class="fw-bold">${esc(d.displayName||'Tài khoản thử nghiệm')}</div><div><span class="badge-trial">Tài khoản thử nghiệm</span></div>`;
+    
+    const hashtagsHtml = (d.hashtags||[]).map(h => `<a href="tag.html?tag=${encodeURIComponent(h)}" class="hashtag">${esc(h)}</a>`).join(' ');
+
+    let ownerButtonsHtml = '';
+    if(currentUser && currentUser.uid === profileUid){
+      ownerButtonsHtml = `<button class="btn btn-sm btn-outline-secondary btn-rounded btn-edit-post me-1" data-id="${id}"><i class="bi bi-pencil"></i></button><button class="btn btn-sm btn-outline-danger btn-rounded btn-delete-post" data-id="${id}"><i class="bi bi-trash"></i></button>`;
     }
 
-    postsArea.innerHTML = snap.docs.map(d => {
-      const p = d.data();
-      const hashtags = (p.hashtags || []).map(h => `<a href="tag.html?tag=${encodeURIComponent(h)}" class="hashtag">${esc(h)}</a>`).join(' ');
-      return `
-        <div class="post-card" data-post-id="${d.id}">
-          <div class="post-header">
-            <div class="post-author-info">
-              <img src="${userAvatarUrlFor(p)}" class="post-avatar" alt="avatar">
-              <div>
-                <div class="post-author">${esc(p.displayName || 'Người dùng')}</div>
-                <div class="post-meta">${fmtDate(p.createdAt)}</div>
-              </div>
-            </div>
-            ${currentUser && currentUser.uid === uid ? `
-              <div class="dropdown">
-                <button class="btn btn-sm btn-link text-secondary" data-bs-toggle="dropdown">
-                  <i class="bi bi-three-dots-vertical"></i>
-                </button>
-                <ul class="dropdown-menu">
-                  <li><a class="dropdown-item" href="#" onclick="window.openEditPost('${d.id}')"><i class="bi bi-pencil me-2"></i>Sửa</a></li>
-                  <li><a class="dropdown-item text-danger" href="#" onclick="window.confirmDeletePost('${d.id}')"><i class="bi bi-trash me-2"></i>Xóa</a></li>
-                </ul>
-              </div>
-            ` : ''}
-          </div>
-          <div class="post-content">
-            <h5 class="post-title">${esc(p.title || '')}</h5>
-            ${hashtags ? `<div class="post-hashtags mb-2">${hashtags}</div>` : ''}
-          </div>
-          <div class="post-actions">
-            <button class="post-action-btn"><i class="bi bi-hand-thumbs-up"></i> ${p.likes || 0}</button>
-            <button class="post-action-btn"><i class="bi bi-hand-thumbs-down"></i> ${p.dislikes || 0}</button>
-            <button class="post-action-btn" onclick="window.openCommentsModal('${d.id}')"><i class="bi bi-chat"></i> ${p.commentsCount || 0}</button>
-            <a href="post.html?id=${d.id}" class="btn btn-sm btn-link">Xem bài <i class="bi bi-arrow-right"></i></a>
-          </div>
-        </div>
-      `;
-    }).join('');
-  }, err => {
-    console.error('posts subscription error', err);
-    postsArea.innerHTML = '<div class="text-center p-4 text-danger">Lỗi khi tải bài viết</div>';
+    card.innerHTML = `
+      <div class="d-flex justify-content-between">
+        <div>${authorHtml}<div class="small-muted">${esc(d.title||'')}</div></div>
+        <div class="small-muted">${fmtDate(d.createdAt)}</div>
+      </div>
+      <div class="mt-2">${hashtagsHtml}</div>
+      <div class="d-flex gap-2 mt-2 align-items-center">
+        <button class="btn btn-sm btn-outline-primary btn-rounded btn-like" data-id="${id}" title="Like"><i class="bi bi-hand-thumbs-up"></i> <span class="like-count">${d.likes||0}</span></button>
+        <button class="btn btn-sm btn-outline-danger btn-rounded btn-dislike" data-id="${id}" title="Dislike"><i class="bi bi-hand-thumbs-down"></i> <span class="dislike-count">${d.dislikes||0}</span></button>
+        <button class="btn btn-sm btn-outline-secondary btn-rounded btn-comment-icon" data-id="${id}" title="Bình luận"><i class="bi bi-chat"></i> <span class="comment-count">${commentCount}</span></button>
+        <a href="post.html?id=${encodeURIComponent(id)}" class="btn btn-sm btn-outline-success btn-rounded ms-auto"><i class="bi bi-box-arrow-up-right"></i> Xem</a>
+      </div>
+      <div class="mt-2 text-end">${ownerButtonsHtml}</div>
+    `;
+
+    // listeners
+    card.querySelectorAll('.btn-like').forEach(b => b.addEventListener('click', ev => { ev.preventDefault(); toggleReaction(id, 'like', card); }));
+    card.querySelectorAll('.btn-dislike').forEach(b => b.addEventListener('click', ev => { ev.preventDefault(); toggleReaction(id, 'dislike', card); }));
+    card.querySelectorAll('.btn-comment-icon').forEach(b => b.addEventListener('click', ev => { ev.preventDefault(); openCommentsModal(id, d.title || ''); }));
+    card.querySelectorAll('.btn-edit-post').forEach(b => b.addEventListener('click', ev => { ev.preventDefault(); openEditPost(id); }));
+    card.querySelectorAll('.btn-delete-post').forEach(b => b.addEventListener('click', ev => { ev.preventDefault(); confirmDeletePost(id); }));
+
+    frag.appendChild(card);
+  });
+
+  listEl.innerHTML = '';
+  listEl.appendChild(frag);
+  
+  const kw = profileSearchInput.value.trim();
+  if(kw) filterPostsByKeyword(kw);
+}
+
+// Reaction handling
+async function toggleReaction(postId, reaction, cardEl){
+  if(!currentUser){ loginModalProfile.show(); return; }
+  try {
+    const likeDocRef = doc(db,'posts',postId,'likes',currentUser.uid);
+    const postRef = doc(db,'posts',postId);
+    const likeSnap = await getDoc(likeDocRef);
+    const batch = writeBatch(db);
+
+    if(!likeSnap.exists()){
+      batch.set(likeDocRef, { userId: currentUser.uid, type: reaction, createdAt: serverTimestamp() });
+      if(reaction === 'like') batch.update(postRef, { likes: increment(1) }); 
+      else batch.update(postRef, { dislikes: increment(1) });
+    } else {
+      const prev = likeSnap.data().type;
+      if(prev === reaction){
+        batch.delete(likeDocRef);
+        if(reaction === 'like') batch.update(postRef, { likes: increment(-1) }); 
+        else batch.update(postRef, { dislikes: increment(-1) });
+      } else {
+        batch.update(likeDocRef, { type: reaction, updatedAt: serverTimestamp() });
+        if(reaction === 'like') batch.update(postRef, { likes: increment(1), dislikes: increment(-1) }); 
+        else batch.update(postRef, { dislikes: increment(1), likes: increment(-1) });
+      }
+    }
+
+    const likeBtn = cardEl.querySelector('.btn-like');
+    const disBtn = cardEl.querySelector('.btn-dislike');
+    if(likeBtn) likeBtn.disabled = true;
+    if(disBtn) disBtn.disabled = true;
+
+    await batch.commit();
+
+    const freshPost = await getDoc(postRef);
+    if(freshPost.exists()){
+      const pdata = freshPost.data();
+      cardEl.querySelector('.like-count').textContent = pdata.likes || 0;
+      cardEl.querySelector('.dislike-count').textContent = pdata.dislikes || 0;
+    }
+  } catch(err){
+    console.error('Reaction failed', err);
+    alert('Reaction failed');
+  } finally {
+    const likeBtn = cardEl.querySelector('.btn-like');
+    const disBtn = cardEl.querySelector('.btn-dislike');
+    if(likeBtn) likeBtn.disabled = false;
+    if(disBtn) disBtn.disabled = false;
+  }
+}
+
+/* ✅ UPDATED: Comments modal with nested replies */
+let currentCommentsPostId = null;
+
+async function openCommentsModal(postId, title){
+  currentCommentsPostId = postId;
+  document.getElementById('profileCommentsTitle').textContent = 'Bình luận — ' + (title || '');
+  
+  if(!currentUser){
+    document.getElementById('profileMustLoginToComment').style.display = 'block';
+    document.getElementById('profileCommentBoxArea').style.display = 'none';
+  } else {
+    document.getElementById('profileMustLoginToComment').style.display = 'none';
+    document.getElementById('profileCommentBoxArea').style.display = 'block';
+    try {
+      const uSnap = await getDoc(doc(db,'users',currentUser.uid));
+      const prof = uSnap.exists() ? uSnap.data() : null;
+      document.getElementById('profileCommenterInfo').innerHTML = `<div class="d-flex gap-2 align-items-center"><img src="${userAvatarUrlFor(prof||currentUser)}" class="user-avatar"><div><div class="fw-bold">${esc(prof?.displayName || currentUser.email)}</div></div></div>`;
+    } catch(e){}
+  }
+
+  // ✅ Subscribe to comments with nested replies support
+  if(commentsSubsCleanup) commentsSubsCleanup();
+  try {
+    const commentsQ = query(collection(db,'posts',postId,'comments'), orderBy('createdAt','desc'));
+    commentsSubsCleanup = onSnapshot(commentsQ, snap => {
+      const list = document.getElementById('profileCommentsList'); 
+      list.innerHTML = '';
+      
+      if(snap.empty){ 
+        list.innerHTML = '<div class="text-muted">Chưa có bình luận</div>'; 
+        return; 
+      }
+      
+      // ✅ Build reply map (from POST team approach)
+      const allComments = snap.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data(),
+        ref: doc.ref
+      }));
+      
+      const replyMap = new Map();
+      const topLevelComments = [];
+      
+      allComments.forEach(comment => {
+        if(comment.replyTo) {
+          if(!replyMap.has(comment.replyTo)) {
+            replyMap.set(comment.replyTo, []);
+          }
+          replyMap.get(comment.replyTo).push(comment);
+        } else {
+          topLevelComments.push(comment);
+        }
+      });
+      
+      // ✅ Render with nested replies
+      topLevelComments.forEach(comment => {
+        renderCommentWithReplies(comment, replyMap, list, 0);
+      });
+    });
+  } catch(err){
+    console.error('comments subscription error', err);
+  }
+
+  commentsModal.show();
+}
+
+// ✅ NEW: Recursive comment rendering with replies
+function renderCommentWithReplies(comment, replyMap, container, depth) {
+  const el = document.createElement('div');
+  el.className = 'mb-3 comment-item';
+  el.style.marginLeft = `${depth * 20}px`;
+  el.style.paddingLeft = depth > 0 ? '12px' : '0';
+  el.style.borderLeft = depth > 0 ? '3px solid #dee2e6' : 'none';
+  
+  let replyBadge = '';
+  if(comment.replyToName) {
+    replyBadge = `<span class="badge bg-primary me-2">Phản hồi ${esc(comment.replyToName)}</span>`;
+  }
+  
+  el.innerHTML = `
+    <div class="fw-bold">${esc(comment.displayName||'')}</div>
+    <div class="small-muted">${fmtDate(comment.createdAt)}</div>
+    ${replyBadge}
+    <div class="comment-text">${esc(comment.text)}</div>
+    <hr>
+  `;
+  
+  container.appendChild(el);
+  
+  // ✅ Render nested replies recursively
+  const replies = replyMap.get(comment.id) || [];
+  replies.forEach(reply => {
+    renderCommentWithReplies(reply, replyMap, container, depth + 1);
   });
 }
 
-/* ========== COMMENTS MODAL ========== */
+// ✅ UPDATED: Remove increment logic when adding comment
+document.getElementById('profilePostCommentBtn').addEventListener('click', async ()=>{
+  const text = document.getElementById('profileCommentText').value.trim();
+  if(!text) return alert('Viết bình luận trước khi gửi.');
+  if(!currentUser) return loginModalProfile.show();
 
-window.openCommentsModal = function(postId){
-  if(commentsSubsCleanup) commentsSubsCleanup();
-  
-  document.getElementById('profileCommentsTitle').textContent = 'Bình luận';
-  document.getElementById('profileCommentsList').innerHTML = '<div class="text-center p-3 text-muted">Đang tải...</div>';
-  commentsModal.show();
-  
-  const q = query(collection(db,'posts',postId,'comments'), orderBy('createdAt','desc'));
-  const unsub = onSnapshot(q, snap => {
-    const list = document.getElementById('profileCommentsList');
-    if(snap.empty){
-      list.innerHTML = '<div class="text-center p-3 text-muted">Chưa có bình luận</div>';
-      return;
-    }
-    
-    list.innerHTML = snap.docs.map(d => {
-      const c = d.data();
-      return `
-        <div class="comment-item">
-          <div class="comment-header">
-            <img src="${userAvatarUrlFor(c)}" class="comment-avatar" alt="avatar">
-            <div>
-              <div class="comment-author">${esc(c.displayName || 'Người dùng')}</div>
-              <div class="comment-meta">${fmtDate(c.createdAt)}</div>
-            </div>
-          </div>
-          <div class="comment-text">${esc(c.text || '')}</div>
-        </div>
-      `;
-    }).join('');
-  });
-  
-  commentsSubsCleanup = unsub;
-  
-  // Comment form
-  const mustLogin = document.getElementById('profileMustLoginToComment');
-  const commentForm = document.getElementById('profileCommentForm');
-  
-  if(mustLogin && commentForm){
-    if(!currentUser){
-      mustLogin.style.display = 'block';
-      commentForm.style.display = 'none';
-    } else {
-      mustLogin.style.display = 'none';
-      commentForm.style.display = 'block';
-      
-      commentForm.onsubmit = async (e) => {
-        e.preventDefault();
-        const textarea = document.getElementById('profileCommentText');
-        const text = textarea?.value.trim();
-        if(!text) return;
-        
-        try {
-          await addDoc(collection(db,'posts',postId,'comments'), {
-            text,
-            userId: currentUser.uid,
-            displayName: currentUser.displayName || currentUser.email || 'Người dùng',
-            createdAt: serverTimestamp()
-          });
-          
-          textarea.value = '';
-          
-          try {
-            await updateDoc(doc(db,'posts',postId), {
-              commentsCount: increment(1)
-            });
-          } catch(e){
-            console.warn('Cannot update commentsCount', e);
-          }
-        } catch(err){
-          console.error('Add comment error', err);
-          alert('Không thể thêm bình luận');
-        }
-      };
-    }
-  }
-};
+  let prof = null;
+  try { 
+    const uSnap = await getDoc(doc(db,'users',currentUser.uid)); 
+    if(uSnap.exists()) prof = uSnap.data(); 
+  } catch(e){}
 
-/* ========== POST EDITOR ========== */
-
-window.openEditPost = async function(postId){
-  ensureQuill();
-  const postSnap = await getDoc(doc(db,'posts',postId));
-  if(!postSnap.exists()) return alert('Bài viết không tồn tại');
-  
-  const post = postSnap.data();
-  document.getElementById('postTitle').value = post.title || '';
-  document.getElementById('postHashtags').value = (post.hashtags || []).join(' ');
-  quillEditor.root.innerHTML = post.content || '';
-  
-  postEditorModalEl.dataset.postId = postId;
-  postEditorModalEl.dataset.mode = 'edit';
-  postEditorModal.show();
-};
-
-postEditorForm?.addEventListener('submit', async (e) => {
-  e.preventDefault();
-  const mode = postEditorModalEl.dataset.mode;
-  const postId = postEditorModalEl.dataset.postId;
-  
-  const title = document.getElementById('postTitle').value.trim();
-  const hashtagsInput = document.getElementById('postHashtags').value.trim();
-  const hashtags = hashtagsInput ? hashtagsInput.split(/\s+/).map(h => h.startsWith('#') ? h : '#'+h) : [];
-  const content = quillEditor.root.innerHTML;
-  
-  if(!title){
-    return alert('Vui lòng nhập tiêu đề');
-  }
-  
   try {
-    if(mode === 'edit' && postId){
-      await updateDoc(doc(db,'posts',postId), {
-        title,
-        hashtags,
-        content,
-        updatedAt: serverTimestamp()
-      });
-      alert('Đã cập nhật bài viết');
-    }
-    
-    postEditorModal.hide();
-    quillEditor.root.innerHTML = '';
-    document.getElementById('postTitle').value = '';
-    document.getElementById('postHashtags').value = '';
+    // ✅ Only add comment - NO increment needed
+    await addDoc(collection(db,'posts',currentCommentsPostId,'comments'), {
+      displayName: prof?.displayName || currentUser.email,
+      userId: currentUser.uid,
+      text,
+      createdAt: serverTimestamp()
+    });
+
+    // ✅ snapshot.size will auto-update UI via onSnapshot
+    document.getElementById('profileCommentText').value = '';
   } catch(err){
-    console.error('Save post error', err);
-    alert('Lỗi khi lưu bài viết');
+    console.error('post comment failed', err);
+    alert('Không thể gửi bình luận');
   }
 });
 
-window.confirmDeletePost = async function(postId){
-  if(!confirm('Xóa bài viết này? Hành động không thể hoàn tác.')) return;
+/* Search */
+profileSearchInput.addEventListener('input', (ev)=>{
+  const kw = ev.target.value.trim();
+  if(!kw){ 
+    renderPostsSnapshot(lastPostsDocs); 
+    profileSearchResults.style.display = 'none'; 
+    return; 
+  }
+  filterPostsByKeyword(kw);
+});
+
+function filterPostsByKeyword(keyword){
+  const low = keyword.toLowerCase();
+  const listEl = document.getElementById('userPostsList');
+  if(!listEl) return;
+  const cards = listEl.querySelectorAll('.card-post');
+  cards.forEach(card => {
+    const text = card.textContent.toLowerCase();
+    card.style.display = text.includes(low) ? '' : 'none';
+  });
+}
+
+/* Visitors modal */
+document.getElementById('openVisitorsBtn').addEventListener('click', async ()=>{
+  if(!userDoc) return;
+  try {
+    const vQ = query(collection(db,'users',userDoc.id,'visitors'), orderBy('lastVisitedAt','desc'));
+    const snaps = await getDocs(vQ);
+    visitorsListEl.innerHTML = '';
+    if(snaps.empty){
+      visitorsListEl.innerHTML = `<div class="text-muted py-2">Chưa có khách ghé thăm</div>`;
+    } else {
+      snaps.forEach(s => {
+        const v = s.data();
+        const display = v.displayName || '(Người dùng)';
+        const tag = v.tagName || '';
+        const avatar = v.avatarUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(display)}&background=0D6EFD&color=fff&size=128`;
+        const el = document.createElement('div');
+        el.className = 'visitor-item position-relative';
+        el.innerHTML = `
+          <img src="${esc(avatar)}" class="visitor-avatar">
+          <div>
+            <div class="fw-bold">${esc(display)} ${ tag ? `<small class="text-muted">(${esc(tag)})</small>` : '' }</div>
+            <div class="small-muted">${fmtDate(v.lastVisitedAt)}</div>
+          </div>
+        `;
+        const link = document.createElement('a');
+        link.href = `profile.html?user=${encodeURIComponent(v.userId)}`;
+        link.className = 'stretched-link';
+        el.appendChild(link);
+        visitorsListEl.appendChild(el);
+      });
+    }
+    new bootstrap.Modal(document.getElementById('visitorsModal')).show();
+  } catch(e){
+    console.error('openVisitors error', e);
+    alert('Không thể tải danh sách khách');
+  }
+});
+
+/* Add/Edit/Delete posts */
+ensureQuill();
+postEditorForm.addEventListener('submit', async (ev)=>{
+  ev.preventDefault();
+  if(!currentUser) return loginModalProfile.show();
+  const title = document.getElementById('editorPostTitle').value.trim();
+  if(!title) return alert('Cần có tiêu đề');
+  const hashtags = (document.getElementById('editorPostHashtags').value || '').split(/[, ]+/).map(s=>s.trim()).filter(Boolean).map(s => s.startsWith('#')? s : '#'+s);
+  const contentHTML = quillEditor.root.innerHTML;
+  const postId = document.getElementById('editorPostId').value || null;
+
+  try {
+    if(postId){
+      await updateDoc(doc(db,'posts',postId), {
+        title, content: contentHTML, hashtags, updatedAt: serverTimestamp()
+      });
+    } else {
+      const uSnap = await getDoc(doc(db,'users',currentUser.uid));
+      const profile = uSnap.exists() ? uSnap.data() : {};
+      await addDoc(collection(db,'posts'), {
+        displayName: profile.displayName || currentUser.email,
+        title, content: contentHTML, hashtags, likes:0, dislikes:0, commentsCount:0, createdAt: serverTimestamp(),
+        userId: currentUser.uid, authorTag: profile.tagName || null
+      });
+    }
+    postEditorModal.hide();
+  } catch(e){
+    console.error('post save error', e);
+    alert('Không thể lưu bài');
+  }
+});
+
+function openAddPostEditor(){
+  ensureQuill();
+  document.getElementById('postEditorTitle').textContent = 'Viết bài mới';
+  document.getElementById('editorPostTitle').value = '';
+  document.getElementById('editorPostHashtags').value = '';
+  document.getElementById('editorPostId').value = '';
+  quillEditor.root.innerHTML = '';
+  postEditorModal.show();
+}
+
+async function openEditPost(postId){
+  ensureQuill();
+  try {
+    const pSnap = await getDoc(doc(db,'posts',postId));
+    if(!pSnap.exists()) return alert('Bài viết không tồn tại');
+    const p = pSnap.data();
+    document.getElementById('postEditorTitle').textContent = 'Chỉnh sửa bài';
+    document.getElementById('editorPostTitle').value = p.title || '';
+    document.getElementById('editorPostHashtags').value = (p.hashtags||[]).join(' ');
+    document.getElementById('editorPostId').value = postId;
+    quillEditor.root.innerHTML = p.content || '';
+    postEditorModal.show();
+  } catch(e){
+    console.error('openEditPost error', e);
+    alert('Không thể mở bài để chỉnh sửa');
+  }
+}
+
+async function confirmDeletePost(postId){
+  if(!confirm('Bạn có chắc muốn xóa bài này? Hành động không thể hoàn tác.')) return;
   try {
     await deleteDoc(doc(db,'posts',postId));
     alert('Đã xóa bài');
@@ -1204,16 +701,14 @@ window.confirmDeletePost = async function(postId){
     console.error('deletePost error', e);
     alert('Không thể xóa bài');
   }
-};
+}
 
-/* ========== PROPAGATE PROFILE ========== */
-
-async function propagateProfileToPostsAndComments(uid, updates){
+/* Propagate profile to posts AND comments */
+async function propagateProfileToPostsAndComments(uid, updates, progressCb){
   if(!uid) return { updatedPosts:0, updatedComments:0, totalPosts:0 };
   const BATCH_SIZE = 450;
   const postsSnap = await getDocs(query(collection(db,'posts'), where('userId','==', uid)));
   if(postsSnap.empty) return { updatedPosts:0, updatedComments:0, totalPosts:0 };
-  
   const posts = postsSnap.docs;
   let totalPosts = posts.length;
   let updatedPosts = 0;
@@ -1221,7 +716,7 @@ async function propagateProfileToPostsAndComments(uid, updates){
 
   for(let i=0;i<posts.length;i++){
     const pDoc = posts[i];
-    
+    // update post doc
     try {
       await updateDoc(doc(db,'posts',pDoc.id), updates);
       updatedPosts++;
@@ -1229,6 +724,7 @@ async function propagateProfileToPostsAndComments(uid, updates){
       console.warn('propagate: update post failed', pDoc.id, e);
     }
 
+    // update comments
     try {
       const commentsQ = query(collection(db,'posts',pDoc.id,'comments'), where('userId','==', uid));
       const cSnap = await getDocs(commentsQ);
@@ -1248,110 +744,95 @@ async function propagateProfileToPostsAndComments(uid, updates){
     } catch(e){
       console.warn('propagate: update comments failed for post', pDoc.id, e);
     }
+
+    if(typeof progressCb === 'function') progressCb({ updatedPosts, updatedComments, totalPosts });
   }
 
   return { updatedPosts, updatedComments, totalPosts };
 }
 
-/* ========== VISITORS MODAL ========== */
-
-openVisitorsBtn?.addEventListener('click', async () => {
-  if(!userDoc || !currentUser || currentUser.uid !== userDoc.id) return;
-  
-  visitorsListEl.innerHTML = '<div class="text-center p-3">Đang tải...</div>';
-  new bootstrap.Modal(document.getElementById('visitorsModal')).show();
-  
-  try {
-    const visitorsSnap = await getDocs(query(collection(db,'users',userDoc.id,'visitors'), orderBy('lastVisitedAt','desc')));
-    if(visitorsSnap.empty){
-      visitorsListEl.innerHTML = '<div class="text-center p-3 text-muted">Chưa có khách nào ghé thăm</div>';
-      return;
+/* Achievements rendering */
+openAchievementsBtn.addEventListener('click', async ()=>{
+  if(!userDoc) return alert('Thiếu thông tin người dùng.');
+  achievementsContainer.innerHTML = '';
+  const createdAt = (userDoc.createdAt && userDoc.createdAt.toDate) ? userDoc.createdAt.toDate() : (userDoc.createdAt ? new Date(userDoc.createdAt) : null);
+  const now = new Date();
+  const MS = { day: 24*60*60*1000, week: 7*24*60*60*1000, month: 30*24*60*60*1000, year: 365*24*60*60*1000 };
+  const milestones = [
+    { key:'1_day', label:'1 Ngày', target: MS.day, style:'small' },
+    { key:'1_week', label:'1 Tuần', target: MS.week, style:'small' },
+    { key:'1_month', label:'1 Tháng', target: MS.month, style:'medium' },
+    { key:'1_year', label:'1 Năm', target: MS.year, style:'medium' },
+    { key:'2_years', label:'2 Năm', target: 2*MS.year, style:'medium' },
+    { key:'3_years', label:'3 Năm', target: 3*MS.year, style:'big' },
+    { key:'4_years', label:'4 Năm', target: 4*MS.year, style:'big' },
+    { key:'5_years', label:'5 Năm', target: 5*MS.year, style:'hero' },
+    { key:'10_years', label:'10 Năm', target: 10*MS.year, style:'hero' },
+    { key:'infinite', label:'Năm vô hạn', target: 10*MS.year, style:'hero' }
+  ];
+  let elapsed = 0;
+  if(createdAt) elapsed = now - createdAt;
+  milestones.forEach(ms => {
+    const card = document.createElement('div');
+    card.className = 'col-12 col-md-6 col-xl-4';
+    const inner = document.createElement('div');
+    inner.className = 'achievement-card' + (ms.style==='big' ? ' big' : '') + (ms.style==='hero' ? ' hero' : '');
+    let pct = 0; let subtitle = '';
+    if(!createdAt){ pct=0; subtitle='Chưa có dữ liệu'; }
+    else {
+      if(ms.key === 'infinite'){
+        const years = Math.floor(elapsed / MS.year);
+        const intoYear = elapsed - (years * MS.year);
+        pct = (intoYear / MS.year) * 100;
+        subtitle = `Đã đồng hành ${years} năm — tiến trình năm tiếp theo: ${Math.round(pct)}%`;
+      } else {
+        pct = Math.min(100, (elapsed / ms.target) * 100);
+        subtitle = `${Math.min(100, Math.round(pct))}% đạt mốc ${ms.label}`;
+      }
     }
-    
-    visitorsListEl.innerHTML = visitorsSnap.docs.map(d => {
-      const v = d.data();
-      return `
-        <div class="visitor-item" onclick="window.location.href='profile.html?user=${d.id}'">
-          <img src="${v.avatarUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(v.displayName||'U')}&background=0D6EFD&color=fff&size=64`}" class="visitor-avatar" alt="avatar">
-          <div class="visitor-info">
-            <div class="visitor-name">${esc(v.displayName || 'Người dùng')}</div>
-            <div class="visitor-tag">${v.tagName ? '@'+esc(v.tagName) : ''}</div>
-          </div>
-          <div class="visitor-time">${fmtDate(v.lastVisitedAt)}</div>
+    inner.innerHTML = `
+      <div class="d-flex justify-content-between align-items-start">
+        <div>
+          <div class="achievement-title">${ms.label} ${ms.style==='hero' ? '<span class="badge bg-warning text-dark ms-2">Đặc biệt</span>' : ''}</div>
+          <div class="achievement-meta">${subtitle}</div>
         </div>
-      `;
-    }).join('');
-  } catch(err){
-    console.error('Load visitors error', err);
-    visitorsListEl.innerHTML = '<div class="text-center p-3 text-danger">Lỗi khi tải danh sách khách</div>';
-  }
+        <div><i class="bi bi-award-fill fs-3 text-warning"></i></div>
+      </div>
+      <div class="achievement-bar" aria-hidden="true"><div class="achievement-progress" style="width:${Math.max(0,Math.min(100, Math.round(pct)))}%"></div></div>
+    `;
+    card.appendChild(inner);
+    achievementsContainer.appendChild(card);
+  });
+  new bootstrap.Modal(document.getElementById('achievementsModal')).show();
 });
 
-/* ========== MENU & AUTH ========== */
-
-menuToggleBtn?.addEventListener('click', ()=> new bootstrap.Offcanvas(profileMenuCanvas).toggle());
+/* Menu & auth area */
+menuToggleBtn.addEventListener('click', ()=> new bootstrap.Offcanvas(profileMenuCanvas).toggle());
 
 function renderMenuAuthArea(){
   if(!menuAuthAreaProfile) return;
   if(currentUser && userDoc && currentUser.uid === userDoc.id){
-    menuAuthAreaProfile.innerHTML = `
-      <div class="d-flex gap-2 align-items-center">
-        <img src="${userAvatarUrlFor(userDoc)}" class="user-avatar" style="width:40px;height:40px;border-radius:50%;object-fit:cover;">
-        <div>
-          <div class="fw-bold">${esc(userDoc.displayName||currentUser.email)}</div>
-          <div class="small-muted">${esc(userDoc.email||'')}</div>
-        </div>
-      </div>
-      <div class="mt-3">
-        <button id="btnLogoutProfile" class="btn btn-outline-danger w-100 btn-rounded">Đăng xuất</button>
-      </div>
-    `;
-    document.getElementById('btnLogoutProfile').addEventListener('click', async ()=> { 
-      await signOut(auth); 
-      new bootstrap.Offcanvas(profileMenuCanvas).hide(); 
-    });
+    menuAuthAreaProfile.innerHTML = `<div class="d-flex gap-2 align-items-center"><img src="${userAvatarUrlFor(userDoc)}" class="user-avatar" style="width:40px;height:40px;border-radius:50%;object-fit:cover;"><div><div class="fw-bold">${esc(userDoc.displayName||currentUser.email)}</div><div class="small-muted">${esc(userDoc.email||'')}</div></div></div><div class="mt-3"><button id="btnLogoutProfile" class="btn btn-outline-danger w-100 btn-rounded">Đăng xuất</button></div>`;
+    document.getElementById('btnLogoutProfile').addEventListener('click', async ()=> { await signOut(auth); new bootstrap.Offcanvas(profileMenuCanvas).hide(); });
   } else if(currentUser){
-    menuAuthAreaProfile.innerHTML = `
-      <div class="d-flex gap-2 align-items-center">
-        <img src="${userAvatarUrlFor(currentUser)}" class="user-avatar" style="width:40px;height:40px;border-radius:50%;object-fit:cover;">
-        <div>
-          <div class="fw-bold">${esc(currentUser.email || '')}</div>
-        </div>
-      </div>
-      <div class="mt-3">
-        <button id="btnLogoutProfile" class="btn btn-outline-danger w-100 btn-rounded">Đăng xuất</button>
-      </div>
-    `;
-    document.getElementById('btnLogoutProfile').addEventListener('click', async ()=> { 
-      await signOut(auth); 
-      new bootstrap.Offcanvas(profileMenuCanvas).hide(); 
-    });
+    menuAuthAreaProfile.innerHTML = `<div class="d-flex gap-2 align-items-center"><img src="${userAvatarUrlFor(currentUser)}" class="user-avatar" style="width:40px;height:40px;border-radius:50%;object-fit:cover;"><div><div class="fw-bold">${esc(currentUser.email || '')}</div></div></div><div class="mt-3"><button id="btnLogoutProfile" class="btn btn-outline-danger w-100 btn-rounded">Đăng xuất</button></div>`;
+    document.getElementById('btnLogoutProfile').addEventListener('click', async ()=> { await signOut(auth); new bootstrap.Offcanvas(profileMenuCanvas).hide(); });
   } else {
-    menuAuthAreaProfile.innerHTML = `
-      <div class="d-grid gap-2">
-        <button id="openLoginProfile" class="btn btn-primary btn-rounded">Đăng nhập</button>
-      </div>
-    `;
-    document.getElementById('openLoginProfile').addEventListener('click', ()=> { 
-      loginModalProfile.show(); 
-      new bootstrap.Offcanvas(profileMenuCanvas).hide(); 
-    });
+    menuAuthAreaProfile.innerHTML = `<div class="d-grid gap-2"><button id="openLoginProfile" class="btn btn-primary btn-rounded">Đăng nhập</button></div>`;
+    document.getElementById('openLoginProfile').addEventListener('click', ()=> { loginModalProfile.show(); new bootstrap.Offcanvas(profileMenuCanvas).hide(); });
   }
 }
 
-/* ========== LOGIN FORM ========== */
-
-document.getElementById('loginFormProfile')?.addEventListener('submit', async (ev)=>{
+/* Login form handling */
+document.getElementById('loginFormProfile').addEventListener('submit', async (ev)=>{
   ev.preventDefault();
   const email = document.getElementById('loginEmailProfile').value.trim();
   const password = document.getElementById('loginPasswordProfile').value;
-  
   try {
     const cred = await signInWithEmailAndPassword(auth, email, password);
     const u = cred.user;
     const udoc = await getDoc(doc(db,'users',u.uid));
     const profile = udoc.exists() ? udoc.data() : null;
-    
     if(profile && profile.activated){
       loginModalProfile.hide();
     } else {
@@ -1378,65 +859,349 @@ document.getElementById('loginFormProfile')?.addEventListener('submit', async (e
   }
 });
 
-/* ========== SEARCH USERS ========== */
-
-let searchTimeout;
-profileSearchInput?.addEventListener('input', (e) => {
-  clearTimeout(searchTimeout);
-  const term = e.target.value.trim().toLowerCase();
+/* 🆕 NEW FEATURE: Full profile editor with avatar + user info */
+function showEditForm(profile, uid){
+  const editArea = document.getElementById('editArea');
+  editArea.style.display = 'block';
   
-  if(!term){
-    profileSearchResults.innerHTML = '';
-    profileSearchResults.style.display = 'none';
-    return;
+  const currentAvatar = profile.avatarUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(profile.displayName||'U')}&background=0D6EFD&color=fff&size=256`;
+  
+  editArea.innerHTML = `
+    <form id="profileEditForm" class="p-3 border rounded bg-white">
+      <h6 class="mb-3 fw-bold">
+        <i class="bi bi-person-gear me-2"></i>Chỉnh sửa thông tin cá nhân
+      </h6>
+      
+      <!-- 🆕 Avatar Editor -->
+      <div class="mb-3">
+        <label class="form-label fw-bold">
+          <i class="bi bi-image me-1"></i>Ảnh đại diện
+        </label>
+        <div class="d-flex gap-3 align-items-start avatar-editor-container">
+          <div>
+            <img id="avatarPreview" src="${currentAvatar}" 
+                 class="rounded-circle" 
+                 style="width:120px;height:120px;object-fit:cover;border:3px solid #dee2e6;"
+                 alt="avatar preview">
+          </div>
+          <div class="flex-fill">
+            <input 
+              id="editAvatarUrl" 
+              type="url"
+              class="form-control mb-2" 
+              placeholder="https://example.com/avatar.jpg"
+              value="${profile.avatarUrl || ''}">
+            <div class="form-note mb-2">
+              <i class="bi bi-info-circle me-1"></i>
+              Nhập URL ảnh từ internet (imgur.com, ibb.co, v.v.).
+            </div>
+            <div class="avatar-editor-buttons">
+              <button type="button" id="testAvatarBtn" class="btn btn-sm btn-outline-primary">
+                <i class="bi bi-eye"></i> Xem trước
+              </button>
+              <button type="button" id="clearAvatarBtn" class="btn btn-sm btn-outline-secondary">
+                <i class="bi bi-x-circle"></i> Xóa ảnh
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <hr>
+      
+      <!-- Basic Info -->
+      <div class="row g-3 mb-3">
+        <div class="col-12">
+          <label class="form-label fw-bold">
+            <i class="bi bi-person-badge me-1"></i>Tên hiển thị (công khai)
+          </label>
+          <input 
+            id="editDisplayName" 
+            class="form-control" 
+            value="${esc(profile.displayName||'')}" 
+            placeholder="Ví dụ: Nguyễn Văn A"
+            required>
+          <div class="form-note">Tên này sẽ hiển thị trên bài viết và bình luận của bạn</div>
+        </div>
+        
+        <div class="col-12">
+          <label class="form-label fw-bold">
+            <i class="bi bi-at me-1"></i>Tag Name Search
+          </label>
+          <input 
+            id="editTagName" 
+            class="form-control" 
+            value="${esc(profile.tagName||'')}"
+            placeholder="@username">
+          <div class="form-note">Tag phải là duy nhất. Ví dụ: @lan123</div>
+        </div>
+      </div>
+      
+      <hr>
+      
+      <!-- 🆕 Extended User Info -->
+      <h6 class="mb-3 fw-bold">
+        <i class="bi bi-info-circle me-2"></i>Thông tin bổ sung
+      </h6>
+      
+      <div class="row g-3 mb-3">
+        <div class="col-md-6">
+          <label class="form-label">
+            <i class="bi bi-gender-ambiguous me-1"></i>Giới tính
+          </label>
+          <select id="editGender" class="form-select">
+            <option value="">Chọn giới tính</option>
+            <option value="male" ${profile.gender === 'male' ? 'selected' : ''}>Nam</option>
+            <option value="female" ${profile.gender === 'female' ? 'selected' : ''}>Nữ</option>
+            <option value="other" ${profile.gender === 'other' ? 'selected' : ''}>Khác</option>
+          </select>
+        </div>
+        
+        <div class="col-md-6">
+          <label class="form-label">
+            <i class="bi bi-calendar-event me-1"></i>Ngày sinh
+          </label>
+          <input 
+            id="editBirthday" 
+            type="date" 
+            class="form-control"
+            value="${profile.birthday || ''}">
+        </div>
+        
+        <div class="col-12">
+          <label class="form-label">
+            <i class="bi bi-geo-alt me-1"></i>Quốc gia
+          </label>
+          <input 
+            id="editCountry" 
+            class="form-control" 
+            value="${esc(profile.country||'')}"
+            placeholder="Ví dụ: Việt Nam">
+        </div>
+      </div>
+      
+      <hr>
+      
+      <!-- Bio -->
+      <div class="mb-3">
+        <label class="form-label fw-bold">
+          <i class="bi bi-chat-quote me-1"></i>Giới thiệu bản thân
+        </label>
+        <textarea 
+          id="editBio" 
+          class="form-control" 
+          rows="4"
+          placeholder="Viết vài dòng về bản thân..."
+          maxlength="1000">${esc(profile.bio||'')}</textarea>
+        <div class="form-note">
+          <span id="bioCounter">0</span>/1000 ký tự
+        </div>
+      </div>
+      
+      <hr>
+      
+      <!-- Action Buttons -->
+      <div class="d-flex gap-2">
+        <button type="submit" class="btn btn-primary btn-rounded">
+          <i class="bi bi-check-lg"></i> Lưu thay đổi
+        </button>
+        <button type="button" id="cancelEdit" class="btn btn-outline-secondary btn-rounded">
+          <i class="bi bi-x-lg"></i> Hủy
+        </button>
+      </div>
+      
+      <div id="editMsg" class="mt-3 small-muted"></div>
+    </form>
+  `;
+
+  // 🆕 Bio character counter
+  const bioTextarea = document.getElementById('editBio');
+  const bioCounter = document.getElementById('bioCounter');
+  
+  function updateBioCounter() {
+    const length = bioTextarea.value.length;
+    bioCounter.textContent = length;
+    if(length > 450) {
+      bioCounter.style.color = 'var(--danger)';
+    } else if(length > 400) {
+      bioCounter.style.color = 'var(--warning)';
+    } else {
+      bioCounter.style.color = 'var(--text-secondary)';
+    }
   }
   
-  searchTimeout = setTimeout(async () => {
+  bioTextarea.addEventListener('input', updateBioCounter);
+  updateBioCounter();
+
+  // 🆕 Avatar preview functionality
+  const avatarInput = document.getElementById('editAvatarUrl');
+  const avatarPreview = document.getElementById('avatarPreview');
+  const defaultAvatar = `https://ui-avatars.com/api/?name=${encodeURIComponent(profile.displayName||'U')}&background=0D6EFD&color=fff&size=256`;
+  
+  // Test avatar button
+  document.getElementById('testAvatarBtn').addEventListener('click', () => {
+    const url = avatarInput.value.trim();
+    if(!url) {
+      avatarPreview.src = defaultAvatar;
+      return;
+    }
+    
+    // Validate URL
     try {
-      const usersSnap = await getDocs(collection(db,'users'));
-      const matches = usersSnap.docs.filter(d => {
-        const data = d.data();
-        return (data.displayName?.toLowerCase().includes(term)) || 
-               (data.tagName?.toLowerCase().includes(term)) ||
-               (data.email?.toLowerCase().includes(term));
-      }).slice(0, 5);
+      new URL(url);
       
-      if(matches.length === 0){
-        profileSearchResults.innerHTML = '<div class="p-2 text-muted">Không tìm thấy</div>';
-        profileSearchResults.style.display = 'block';
+      // Test if image loads
+      const testImg = new Image();
+      testImg.onload = () => {
+        avatarPreview.src = url;
+        avatarInput.classList.remove('is-invalid');
+        avatarInput.classList.add('is-valid');
+      };
+      testImg.onerror = () => {
+        alert('⚠️ Không thể tải ảnh từ URL này. Vui lòng kiểm tra lại:\n\n- URL có đúng không?\n- Link ảnh có công khai không?\n- Thử mở link trong tab mới để kiểm tra');
+        avatarInput.classList.remove('is-valid');
+        avatarInput.classList.add('is-invalid');
+      };
+      testImg.src = url;
+      
+    } catch(e) {
+      alert('❌ URL không hợp lệ.\n\nVui lòng nhập đúng định dạng:\nhttps://example.com/image.jpg');
+      avatarInput.classList.add('is-invalid');
+    }
+  });
+  
+  // Clear avatar button
+  document.getElementById('clearAvatarBtn').addEventListener('click', () => {
+    avatarInput.value = '';
+    avatarPreview.src = defaultAvatar;
+    avatarInput.classList.remove('is-valid', 'is-invalid');
+  });
+  
+  // Auto preview on input (debounced)
+  let previewTimeout;
+  avatarInput.addEventListener('input', () => {
+    clearTimeout(previewTimeout);
+    previewTimeout = setTimeout(() => {
+      const url = avatarInput.value.trim();
+      if(!url) {
+        avatarPreview.src = defaultAvatar;
+        avatarInput.classList.remove('is-valid', 'is-invalid');
         return;
       }
       
-      profileSearchResults.innerHTML = matches.map(d => {
-        const u = d.data();
-        return `
-          <a href="profile.html?user=${d.id}" class="search-result-item">
-            <img src="${userAvatarUrlFor(u)}" class="search-result-avatar" alt="avatar">
-            <div>
-              <div class="search-result-name">${esc(u.displayName || 'Người dùng')}</div>
-              <div class="search-result-tag">${u.tagName ? '@'+esc(u.tagName) : ''}</div>
-            </div>
-          </a>
-        `;
-      }).join('');
-      profileSearchResults.style.display = 'block';
+      try {
+        new URL(url);
+        const testImg = new Image();
+        testImg.onload = () => {
+          avatarPreview.src = url;
+          avatarInput.classList.remove('is-invalid');
+          avatarInput.classList.add('is-valid');
+        };
+        testImg.onerror = () => {
+          avatarInput.classList.remove('is-valid');
+          avatarInput.classList.add('is-invalid');
+        };
+        testImg.src = url;
+      } catch(e) {
+        avatarInput.classList.add('is-invalid');
+      }
+    }, 500);
+  });
+
+  document.getElementById('cancelEdit').addEventListener('click', ()=> { editArea.style.display='none'; });
+
+  document.getElementById('profileEditForm').addEventListener('submit', async (ev)=>{
+    ev.preventDefault();
+    
+    // Collect all form data
+    const newDisplay = document.getElementById('editDisplayName').value.trim();
+    let newTag = document.getElementById('editTagName').value.trim();
+    const newBio = document.getElementById('editBio').value.trim();
+    const newAvatarUrl = document.getElementById('editAvatarUrl').value.trim() || null;
+    const newGender = document.getElementById('editGender').value || null;
+    const newBirthday = document.getElementById('editBirthday').value || null;
+    const newCountry = document.getElementById('editCountry').value.trim() || null;
+    
+    if(!newDisplay) return alert('❌ Tên hiển thị không được để trống.');
+    if(newTag && !newTag.startsWith('@')) newTag = '@' + newTag;
+    
+    const editMsg = document.getElementById('editMsg');
+    editMsg.innerHTML = '<i class="bi bi-hourglass-split me-2"></i>Đang kiểm tra & cập nhật...';
+
+    try {
+      // Validate avatar URL if provided
+      if(newAvatarUrl) {
+        try {
+          new URL(newAvatarUrl);
+          // Test image load
+          await new Promise((resolve, reject) => {
+            const img = new Image();
+            img.onload = resolve;
+            img.onerror = () => reject(new Error('Không thể tải ảnh'));
+            img.src = newAvatarUrl;
+            setTimeout(() => reject(new Error('Timeout')), 5000);
+          });
+        } catch(e) {
+          editMsg.textContent = '';
+          return alert('⚠️ URL ảnh không hợp lệ hoặc không thể truy cập.\n\nVui lòng:\n- Kiểm tra link có đúng không\n- Thử mở link trong tab mới\n- Sử dụng dịch vụ khác (imgur.com, ibb.co)');
+        }
+      }
+      
+      // Check tagName uniqueness
+      if(newTag && newTag !== (profile.tagName || '')){
+        const snaps = await getDocs(query(collection(db,'users'), where('tagName','==', newTag)));
+        let conflict = false; 
+        snaps.forEach(s=>{ if(s.id !== uid) conflict = true; });
+        if(conflict){ 
+          editMsg.textContent=''; 
+          return alert('❌ Tag Name đã được sử dụng.\n\nVui lòng chọn tag khác.'); 
+        }
+      }
+
+      const userRef = doc(db,'users',uid);
+      
+      // 🆕 Update all user info fields
+      const dataToUpdate = { 
+        displayName: newDisplay, 
+        bio: newBio,
+        avatarUrl: newAvatarUrl,
+        gender: newGender,
+        birthday: newBirthday,
+        country: newCountry,
+        updatedAt: serverTimestamp() 
+      };
+      if(newTag) dataToUpdate.tagName = newTag;
+      
+      await updateDoc(userRef, dataToUpdate);
+
+      // Propagate displayName/tagName to posts/comments
+      const propagateFields = { displayName: newDisplay };
+      if(newTag) propagateFields.authorTag = newTag;
+      
+      editMsg.innerHTML = '<i class="bi bi-arrow-repeat me-2"></i>Đang cập nhật bài viết và bình luận cũ...';
+      await propagateProfileToPostsAndComments(uid, propagateFields, (progress)=> {
+        editMsg.innerHTML = `<i class="bi bi-check2 me-2"></i>Đã cập nhật ${progress.updatedPosts}/${progress.totalPosts} bài — ${progress.updatedComments} bình luận...`;
+      });
+
+      editMsg.innerHTML = '<i class="bi bi-check-circle-fill text-success me-2"></i>✅ Hoàn tất! Thông tin đã được cập nhật.';
+      
+      // Update main avatar immediately
+      const mainAvatar = document.getElementById('profileAvatarImg');
+      if(mainAvatar) {
+        mainAvatar.src = newAvatarUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(newDisplay)}&background=0D6EFD&color=fff&size=256`;
+      }
+      
+      await loadProfile(uid);
+      setTimeout(()=> { editArea.style.display='none'; }, 1500);
     } catch(err){
-      console.error('Search error', err);
+      console.error(err);
+      editMsg.textContent = '';
+      alert('❌ Lỗi khi cập nhật thông tin:\n\n' + (err.message || err) + '\n\nVui lòng thử lại sau.');
     }
-  }, 300);
-});
+  });
+}
 
-// Click outside to close search results
-document.addEventListener('click', (e) => {
-  if(!profileSearchInput?.contains(e.target) && !profileSearchResults?.contains(e.target)){
-    if(profileSearchResults){
-      profileSearchResults.style.display = 'none';
-    }
-  }
-});
-
-/* ========== EXPOSE FUNCTIONS ========== */
-
+/* Expose to window (for legacy) */
 window.showEditForm = async function(profile, uid){
   if(!profile && uid){
     try { 
@@ -1451,32 +1216,23 @@ window.confirmDeletePost = confirmDeletePost;
 window.doFollow = doFollow;
 window.doUnfollow = doUnfollow;
 
-/* ========== AUTH HANDLING ========== */
-
+/* Auth handling */
 onAuthStateChanged(auth, user => {
   currentUser = user;
   ensureQuill();
-  renderMenuAuthArea();
-  
   if(!profileUid){
     if(user){ 
       profileUid = user.uid; 
       loadProfile(profileUid); 
     } else { 
-      profileArea.innerHTML = `
-        <div class="text-center p-4">
-          <div class="mb-3">Bạn chưa đăng nhập.</div>
-          <div><a class="btn btn-primary" href="index.html">Về trang chủ</a></div>
-        </div>
-      `; 
+      profileArea.innerHTML = `<div class="text-center p-4"><div class="mb-3">Bạn chưa đăng nhập.</div><div><a class="btn btn-primary" href="index.html">Về trang chủ</a></div></div>`; 
     }
   } else {
     loadProfile(profileUid);
   }
 });
 
-/* ========== CLEANUP ========== */
-
+/* Cleanup */
 window.addEventListener('beforeunload', ()=>{
   if(postsUnsub) postsUnsub();
   if(commentsSubsCleanup) commentsSubsCleanup();
