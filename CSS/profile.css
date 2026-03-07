@@ -1,79 +1,321 @@
+/* ═══════════════════════════════════════════════════════════
+   profile.css  —  Relife Profile Page
+   Updated: V3.2 — Cover photo / Avatar frame / Grouped achievements
+   ═══════════════════════════════════════════════════════════ */
+
 @font-face {
   font-family: 'One OS UI 1';
   src: url('../SVN-Agency FB bold.ttf') format('truetype');
   font-weight: normal;
   font-style: normal;
 }
-/* Preserve newlines and long words in bio and comment text */
-.profile-bio,
-.comment-text {
-  white-space: pre-wrap;   /* preserve newlines and wrap long lines */
-  word-break: break-word;  /* avoid overflow for long strings/urls */
+
+/* ─── CSS Variables ───────────────────────────────────────── */
+:root {
+  --card-radius: 12px;
+  --muted: #6c757d;
+  --accent: #0d6efd;
+  --cover-height: 220px;
+  --cover-height-sm: 150px;
+  --avatar-size: 100px;
+  --avatar-size-sm: 80px;
+  --avatar-border: 4px;
+  --frame-transition: 0.2s ease;
 }
 
+/* ─── Base ───────────────────────────────────────────────── */
+body {
+  background: #f6f7fb;
+  font-family: "One OS UI 1", system-ui, -apple-system, "Segoe UI", Roboto, Arial;
+  color: #111827;
+}
+
+.container { max-width: 1000px; }
+
+/* Preserve newlines in bio / comments */
+.profile-bio,
+.comment-text {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* ─── Navbar ─────────────────────────────────────────────── */
 .navbar {
   width: 100%;
   position: fixed;
   top: 0;
   z-index: 1049;
 }
+
 #profileMenuCanvas {
   position: fixed;
   z-index: 1050;
 }
+
 #profileArea {
   margin-top: 62px;
 }
+
 #visitorsModal {
   z-index: 5052;
 }
 
-:root { --card-radius:12px; --muted:#6c757d; --accent:#0d6efd; }
-body { background:#f6f7fb; font-family: "One OS UI 1", system-ui, -apple-system, "Segoe UI", Roboto, Arial; color:#111827; }
-.container { max-width:1000px; }
+/* ─── Nav Search ─────────────────────────────────────────── */
+.search-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  background: #f8fafc;
+  padding: 6px 10px;
+  border-radius: 10px;
+}
 
-/* Nav search */
-.search-box { }
-.search-row { display:flex; gap:8px; align-items:center; background:#f8fafc; padding:6px 10px; border-radius:10px; }
-.search-results { display:none; position:absolute; top:100%; left:0; right:0; background:#fff; border-radius:10px; box-shadow:0 8px 30px rgba(2,6,23,0.08); max-height:360px; overflow:auto; z-index:2000; padding:8px; }
+.search-results {
+  display: none;
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  background: #fff;
+  border-radius: 10px;
+  box-shadow: 0 8px 30px rgba(2, 6, 23, 0.08);
+  max-height: 360px;
+  overflow: auto;
+  z-index: 2000;
+  padding: 8px;
+}
 
-/* Profile header */
-.profile-header { display:flex; gap:16px; align-items:center; }
-.profile-avatar { width:96px; height:96px; border-radius:50%; object-fit:cover; border:4px solid #fff; box-shadow:0 6px 18px rgba(17,24,39,0.08); }
-.profile-meta { flex:1; }
-.profile-name { font-size:1.4rem; font-weight:700; display:flex; gap:8px; align-items:center; }
-.profile-tag { color:var(--accent); font-weight:600; font-size:0.95rem; }
-.profile-basic { color:var(--muted); margin-top:6px; display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
+/* ═══════════════════════════════════════════════════════════
+   COVER PHOTO BANNER
+   ═══════════════════════════════════════════════════════════ */
+.profile-cover-banner {
+  position: relative;
+  width: 100%;
+  height: var(--cover-height);
+  background: linear-gradient(135deg, #e0e7ff 0%, #dbeafe 50%, #ede9fe 100%);
+  overflow: hidden;
+  border-radius: 0; /* card handles radius */
+}
 
-/* follow counts */
-.follow-stats { display:flex; gap:12px; align-items:center; margin-top:8px; }
-.follow-stats .stat { background:#fff; padding:8px 12px; border-radius:999px; box-shadow:0 6px 14px rgba(0,0,0,0.04); font-weight:600; }
+.profile-cover-banner img.cover-img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transform-origin: center center;
+  transition: transform 0.3s ease;
+}
 
-/* bio */
-.profile-bio { margin-top:12px; background:#fbfbfd; padding:12px; border-radius:10px; color:#222; }
+.profile-cover-banner .cover-placeholder {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #a5b4fc;
+  font-size: 3rem;
+  pointer-events: none;
+}
 
-/* posts list - spacing */
-.profile-posts { margin-top:18px; }
-.profile-post { border-radius:12px; padding:12px; background:#fff; box-shadow:0 6px 14px rgba(17,24,39,0.04); margin-bottom:18px; }
+/* Owner: edit cover button overlaid on banner */
+.cover-edit-btn {
+  position: absolute;
+  bottom: 10px;
+  right: 14px;
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(6px);
+  border: none;
+  border-radius: 8px;
+  padding: 6px 14px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #374151;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: background 0.2s, transform 0.15s;
+  z-index: 2;
+}
 
-/* control buttons */
-.btn-rounded { border-radius:10px; }
-.small-muted { color:var(--muted); }
+.cover-edit-btn:hover {
+  background: rgba(255, 255, 255, 0.98);
+  transform: translateY(-1px);
+}
 
-/* tags & small visuals */
-.hashtag { font-size:.88rem; color:var(--accent); margin-right:6px; text-decoration:none; }
-.badge-trial { background:#ffc107; color:#212529; padding:.2rem .45rem; border-radius:8px; font-size:.75rem; }
+/* ═══════════════════════════════════════════════════════════
+   PROFILE HEADER (avatar + meta area below banner)
+   ═══════════════════════════════════════════════════════════ */
+.profile-info-area { padding: 0 20px 16px; }
 
-/* comment icon only button */
-.btn-comment-icon { min-width:44px; display:inline-flex; align-items:center; justify-content:center; }
+/* Top row: avatar + meta side by side */
+.profile-top-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 16px;
+  flex-wrap: wrap;
+}
 
-/* visitors list */
-.visitor-item { display:flex; gap:12px; align-items:center; padding:.6rem .4rem; border-radius:8px; border-bottom:1px solid #f1f3f5; }
-.visitor-avatar { width:44px; height:44px; border-radius:50%; object-fit:cover; }
+/* ── Avatar outer — pulled up over cover ── */
+.profile-avatar-outer {
+  position: relative;
+  flex-shrink: 0;
+  width: var(--avatar-size);
+  height: var(--avatar-size);
+  margin-top: calc(-1 * var(--avatar-size) / 2 - 6px);
+  z-index: 3;
+  --av-scale: 1;
+  --av-tx: 0px;
+  --av-ty: 0px;
+}
 
-/* ===== FIXED COMMENTS MODAL STYLES ===== */
+/* Clipped circle — avatar stays inside */
+.profile-avatar-clip {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  overflow: hidden;
+  border: var(--avatar-border) solid #fff;
+  box-shadow: 0 6px 18px rgba(17,24,39,0.12);
+  background: #e5e7eb;
+  position: relative;
+  z-index: 1;
+}
 
-/* User avatar in commenter info */
+/* Avatar img uses CSS-var transform, clipped by parent */
+.profile-avatar-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+  display: block;
+  transform-origin: center center;
+  transform: scale(var(--av-scale)) translate(var(--av-tx), var(--av-ty));
+  transition: transform 0.2s ease;
+}
+
+/* Frame overlay OUTSIDE clip — never cropped, sits on top of border */
+.profile-avatar-frame {
+  position: absolute;
+  inset: calc(-1 * var(--avatar-border));
+  width: calc(100% + var(--avatar-border) * 2);
+  height: calc(100% + var(--avatar-border) * 2);
+  object-fit: contain;
+  pointer-events: none;
+  z-index: 2;
+}
+
+/* Owner action buttons on avatar */
+.avatar-action-btn {
+  position: absolute;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.92);
+  backdrop-filter: blur(4px);
+  border: 1.5px solid #dee2e6;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 0.68rem;
+  color: #495057;
+  transition: border-color 0.2s, color 0.2s, transform 0.15s;
+  z-index: 4;
+}
+.avatar-action-btn:hover { border-color: var(--accent); color: var(--accent); transform: scale(1.12); }
+.avatar-frame-btn { bottom: 2px; right: 2px; }
+.avatar-edit-btn  { bottom: 2px; right: 32px; }
+
+/* ── Meta text ── */
+.profile-meta { flex: 1; min-width: 0; padding-top: 10px; }
+
+.profile-name-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.profile-name  { font-size: 1.3rem; font-weight: 700; line-height: 1.25; }
+.profile-tag   { color: var(--accent); font-weight: 600; font-size: 0.88rem; margin-top: 2px; }
+.profile-basic { color: var(--muted); margin-top: 4px; display: flex; gap: 10px; flex-wrap: wrap; font-size: 0.88rem; }
+
+/* FIX 4: Follow counts — single row */
+.follow-stats-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  flex-wrap: wrap;
+  font-size: 0.88rem;
+  color: #374151;
+}
+.follow-stat-item { white-space: nowrap; }
+.follow-stat-item strong { font-weight: 700; color: #111827; }
+.follow-stat-sep { color: var(--muted); font-size: 0.75rem; }
+
+/* FIX 3: Xem thêm button */
+.btn-xem-them {
+  background: none;
+  border: none;
+  color: var(--accent);
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+.btn-xem-them:hover { opacity: 0.75; }
+
+/* Bio */
+.profile-bio { margin-top: 12px; background: #fbfbfd; padding: 12px; border-radius: 10px; color: #222; }
+
+/* ═══════════════════════════════════════════════════════════
+   POSTS LIST
+   ═══════════════════════════════════════════════════════════ */
+.profile-posts { margin-top: 18px; }
+
+.profile-post {
+  border-radius: 12px;
+  padding: 12px;
+  background: #fff;
+  box-shadow: 0 6px 14px rgba(17, 24, 39, 0.04);
+  margin-bottom: 18px;
+}
+
+/* ─── Shared utility ─────────────────────────────────────── */
+.btn-rounded { border-radius: 10px; }
+.small-muted { color: var(--muted); }
+.hashtag { font-size: .88rem; color: var(--accent); margin-right: 6px; text-decoration: none; }
+.badge-trial { background: #ffc107; color: #212529; padding: .2rem .45rem; border-radius: 8px; font-size: .75rem; }
+.btn-comment-icon { min-width: 44px; display: inline-flex; align-items: center; justify-content: center; }
+
+/* ═══════════════════════════════════════════════════════════
+   VISITORS LIST
+   ═══════════════════════════════════════════════════════════ */
+.visitor-item {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  padding: .6rem .4rem;
+  border-radius: 8px;
+  border-bottom: 1px solid #f1f3f5;
+}
+
+.visitor-avatar {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   COMMENTS MODAL
+   ═══════════════════════════════════════════════════════════ */
 .user-avatar {
   width: 40px;
   height: 40px;
@@ -82,14 +324,17 @@ body { background:#f6f7fb; font-family: "One OS UI 1", system-ui, -apple-system,
   border: 2px solid #dee2e6;
 }
 
-/* Comments list container */
 #profileCommentsList {
   max-height: 450px;
   overflow-y: auto;
   padding: 8px;
 }
 
-/* Individual comment item */
+#profileCommentsList::-webkit-scrollbar { width: 8px; }
+#profileCommentsList::-webkit-scrollbar-track { background: #f1f3f5; border-radius: 4px; }
+#profileCommentsList::-webkit-scrollbar-thumb { background: #adb5bd; border-radius: 4px; }
+#profileCommentsList::-webkit-scrollbar-thumb:hover { background: #6c757d; }
+
 .comment-item {
   background: #f8f9fa;
   padding: 12px;
@@ -103,20 +348,13 @@ body { background:#f6f7fb; font-family: "One OS UI 1", system-ui, -apple-system,
   transform: translateX(2px);
 }
 
-/* Nested reply styling */
 .comment-item[style*="margin-left"] {
   background: #fff;
-  border-left-width: 3px !important;
-  border: solid 1px black !important;
-  
+  border: solid 1px #dee2e6 !important;
+  border-left: 3px solid var(--accent) !important;
 }
 
-/* Comment header (name + time) */
-.comment-item .fw-bold {
-  font-size: 0.95rem;
-  color: #212529;
-  margin-bottom: 4px;
-}
+.comment-item .fw-bold { font-size: 0.95rem; color: #212529; margin-bottom: 4px; }
 
 .comment-item .small-muted {
   font-size: 0.8rem;
@@ -127,15 +365,6 @@ body { background:#f6f7fb; font-family: "One OS UI 1", system-ui, -apple-system,
   margin-bottom: 8px;
 }
 
-/* Reply badge */
-.comment-item .badge {
-  font-size: 0.75rem;
-  padding: 4px 8px;
-  margin-bottom: 8px;
-  display: inline-block;
-}
-
-/* Comment text */
 .comment-item .comment-text {
   font-size: 0.95rem;
   line-height: 1.5;
@@ -145,13 +374,7 @@ body { background:#f6f7fb; font-family: "One OS UI 1", system-ui, -apple-system,
   word-break: break-word;
 }
 
-/* Divider between comments */
-.comment-item hr {
-  margin: 8px 0 0 0;
-  border-color: rgba(0,0,0,0.08);
-}
-
-/* Comment box area */
+/* Comments box area */
 #profileCommentBoxArea {
   background: #f8f9fa;
   padding: 16px;
@@ -165,43 +388,32 @@ body { background:#f6f7fb; font-family: "One OS UI 1", system-ui, -apple-system,
   gap: 10px;
   margin-bottom: 12px;
   padding: 8px;
-  background: white;
+  background: #fff;
   border-radius: 8px;
 }
 
-#profileCommenterInfo .user-avatar {
-  width: 36px;
-  height: 36px;
-}
-
-#profileCommenterInfo .fw-bold {
-  font-size: 0.9rem;
-}
-
-/* Comment textarea */
 #profileCommentText {
   border: 2px solid #dee2e6;
   border-radius: 10px;
   padding: 12px;
   font-size: 0.95rem;
-  transition: all 0.2s ease;
+  transition: border-color 0.2s, box-shadow 0.2s;
   resize: vertical;
   min-height: 80px;
+  width: 100%;
 }
 
 #profileCommentText:focus {
-  border-color: #0d6efd;
+  border-color: var(--accent);
   box-shadow: 0 0 0 3px rgba(13, 110, 253, 0.1);
   outline: none;
 }
 
-/* Post comment button */
 #profilePostCommentBtn {
   padding: 10px 24px;
   font-weight: 600;
-  font-size: 0.95rem;
   border-radius: 10px;
-  transition: all 0.2s ease;
+  transition: transform 0.2s, box-shadow 0.2s;
 }
 
 #profilePostCommentBtn:hover {
@@ -209,7 +421,6 @@ body { background:#f6f7fb; font-family: "One OS UI 1", system-ui, -apple-system,
   box-shadow: 0 4px 12px rgba(13, 110, 253, 0.3);
 }
 
-/* Login notice in modal */
 #profileMustLoginToComment {
   background: linear-gradient(135deg, #fff3cd 0%, #ffe5a1 100%);
   border: 1px solid #ffc107;
@@ -219,18 +430,15 @@ body { background:#f6f7fb; font-family: "One OS UI 1", system-ui, -apple-system,
 }
 
 #profileMustLoginToComment a {
-  color: #0d6efd;
+  color: var(--accent);
   font-weight: 600;
   text-decoration: none;
   border-bottom: 2px solid transparent;
   transition: border-color 0.2s;
 }
 
-#profileMustLoginToComment a:hover {
-  border-bottom-color: #0d6efd;
-}
+#profileMustLoginToComment a:hover { border-bottom-color: var(--accent); }
 
-/* Empty state */
 #profileCommentsList .text-muted {
   text-align: center;
   padding: 40px 20px;
@@ -238,57 +446,308 @@ body { background:#f6f7fb; font-family: "One OS UI 1", system-ui, -apple-system,
   font-size: 0.95rem;
 }
 
-/* Scrollbar styling for comments list */
-#profileCommentsList::-webkit-scrollbar {
-  width: 8px;
-}
-
-#profileCommentsList::-webkit-scrollbar-track {
-  background: #f1f3f5;
-  border-radius: 4px;
-}
-
-#profileCommentsList::-webkit-scrollbar-thumb {
-  background: #adb5bd;
-  border-radius: 4px;
-}
-
-#profileCommentsList::-webkit-scrollbar-thumb:hover {
-  background: #6c757d;
-}
-
-/* Modal title */
 #profileCommentsTitle {
   font-weight: 700;
   font-size: 1.1rem;
   color: #212529;
 }
 
-/* ===== END COMMENTS MODAL STYLES ===== */
+/* ═══════════════════════════════════════════════════════════
+   ACHIEVEMENTS MODAL — GROUP CARDS
+   ═══════════════════════════════════════════════════════════ */
+.achievement-group-card {
+  background: #fff;
+  border: 1px solid #e9ecef;
+  border-radius: 14px;
+  padding: 18px 20px;
+  cursor: pointer;
+  transition: border-color 0.2s, box-shadow 0.2s, transform 0.15s;
+  user-select: none;
+}
 
-/* Achievements */
+.achievement-group-card:hover {
+  border-color: var(--accent);
+  box-shadow: 0 6px 20px rgba(13, 110, 253, 0.1);
+  transform: translateY(-2px);
+}
+
+.achievement-group-card:focus-visible {
+  outline: 3px solid rgba(13, 110, 253, 0.4);
+  outline-offset: 2px;
+}
+
+.achievement-group-icon {
+  width: 56px;
+  height: 56px;
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+/* Summary badge inside group card */
+.achievement-group-badge {
+  font-size: 0.8rem;
+  color: var(--muted);
+  text-align: right;
+  white-space: nowrap;
+}
+
+/* ─── Achievement detail cards (inside Đồng hành) ─────────── */
 .achievement-card {
   background: linear-gradient(180deg, #fff 0%, #fbfbff 100%);
-  border-radius:14px;
-  box-shadow: 0 12px 30px rgba(2,6,23,0.08);
-  padding:18px;
-  display:flex;
-  flex-direction:column;
-  gap:12px;
-  align-items:flex-start;
+  border-radius: 14px;
+  box-shadow: 0 12px 30px rgba(2, 6, 23, 0.08);
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  align-items: flex-start;
+  width: 100%;
 }
-.achievement-title { font-weight:700; font-size:1.05rem; display:flex; gap:8px; align-items:center; }
-.achievement-meta { color:var(--muted); font-size:.9rem; }
-.achievement-bar { width:100%; height:12px; background:#eef2ff; border-radius:999px; overflow:hidden; }
-.achievement-progress { height:100%; background:linear-gradient(90deg,#7c3aed,#0ea5e9); border-radius:999px; transition:width .45s ease; }
 
-.achievement-card.big { padding:24px; border-radius:18px; }
-.achievement-card.hero { background: linear-gradient(90deg,#0ea5e9,#7c3aed); color:#fff; box-shadow: 0 18px 40px rgba(14,165,233,0.15); }
+.achievement-title {
+  font-weight: 700;
+  font-size: 1.05rem;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
 
-/* editor quill within modal */
-#editorQuill .ql-editor { min-height:180px; max-height:520px; overflow:auto; }
+.achievement-meta { color: var(--muted); font-size: .9rem; }
 
-/* Avatar editor styles */
+.achievement-bar {
+  width: 100%;
+  height: 12px;
+  background: #eef2ff;
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.achievement-progress {
+  height: 100%;
+  background: linear-gradient(90deg, #7c3aed, #0ea5e9);
+  border-radius: 999px;
+  transition: width .45s ease;
+}
+
+/* Frame reward badge on achievement card */
+.achievement-frame-reward {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: linear-gradient(135deg, #fef9c3, #fde68a);
+  border: 1px solid #fbbf24;
+  border-radius: 999px;
+  padding: 4px 12px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #92400e;
+  margin-top: 4px;
+}
+
+.achievement-frame-reward img {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+}
+
+.achievement-card.big { padding: 24px; border-radius: 18px; }
+
+.achievement-card.hero {
+  background: linear-gradient(90deg, #0ea5e9, #7c3aed);
+  color: #fff;
+  box-shadow: 0 18px 40px rgba(14, 165, 233, 0.15);
+}
+
+.achievement-card.hero .achievement-bar { background: rgba(255,255,255,0.2); }
+.achievement-card.hero .achievement-meta { color: rgba(255,255,255,0.8); }
+
+/* Completed checkmark */
+.achievement-completed-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: #d1fae5;
+  color: #065f46;
+  border-radius: 999px;
+  padding: 3px 10px;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.achievement-card.hero .achievement-completed-badge {
+  background: rgba(255,255,255,0.25);
+  color: #fff;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   AVATAR FRAME PICKER MODAL
+   ═══════════════════════════════════════════════════════════ */
+
+/* Grid layout for frame cards */
+.frame-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+  gap: 12px;
+}
+
+/* Individual frame card */
+.frame-card {
+  position: relative;
+  border: 2px solid #e9ecef;
+  border-radius: 14px;
+  padding: 10px 8px;
+  cursor: pointer;
+  text-align: center;
+  transition: border-color var(--frame-transition),
+              box-shadow var(--frame-transition),
+              transform var(--frame-transition);
+  background: #fff;
+  user-select: none;
+}
+
+.frame-card:hover {
+  border-color: var(--accent);
+  box-shadow: 0 4px 14px rgba(13, 110, 253, 0.12);
+  transform: translateY(-2px);
+}
+
+.frame-card.selected {
+  border-color: var(--accent);
+  background: #eff6ff;
+  box-shadow: 0 0 0 3px rgba(13, 110, 253, 0.2);
+}
+
+.frame-card.locked {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.frame-card.locked:hover {
+  border-color: #e9ecef;
+  box-shadow: none;
+  transform: none;
+}
+
+/* Frame thumbnail (avatar + frame overlay stacked) */
+.frame-thumb-wrapper {
+  position: relative;
+  width: 64px;
+  height: 64px;
+  margin: 0 auto 8px;
+}
+
+.frame-thumb-avatar {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.frame-thumb-overlay {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  pointer-events: none;
+}
+
+.frame-card-name {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #374151;
+  line-height: 1.3;
+  word-break: break-word;
+}
+
+.frame-card-locked-label {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  background: rgba(0, 0, 0, 0.5);
+  color: #fff;
+  border-radius: 50%;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.68rem;
+}
+
+.frame-card-check {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  background: var(--accent);
+  color: #fff;
+  border-radius: 50%;
+  width: 20px;
+  height: 20px;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.7rem;
+}
+
+.frame-card.selected .frame-card-check { display: flex; }
+.frame-card.selected .frame-card-locked-label { display: none; }
+
+/* Unlock hint on locked cards */
+.frame-unlock-hint {
+  font-size: 0.72rem;
+  color: #9ca3af;
+  margin-top: 4px;
+}
+
+/* Frame modal preview wrapper */
+.frame-preview-wrapper {
+  position: relative;
+  width: 100px;
+  height: 100px;
+}
+
+.frame-preview-wrapper img.frame-preview-av {
+  width: 100px;
+  height: 100px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 3px solid #dee2e6;
+}
+
+.frame-preview-wrapper img.frame-preview-fr {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  pointer-events: none;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   PROFILE EDIT MODAL — COVER PREVIEW BANNER
+   ═══════════════════════════════════════════════════════════ */
+.cover-editor-container {
+  background: #f8f9fa;
+  padding: 16px;
+  border-radius: 12px;
+}
+
+.cover-preview-banner {
+  width: 100%;
+  height: 140px;
+  border-radius: 10px;
+  overflow: hidden;
+  background: linear-gradient(135deg, #e0e7ff 0%, #dbeafe 50%, #ede9fe 100%);
+  position: relative;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   PROFILE EDIT MODAL — AVATAR EDITOR
+   ═══════════════════════════════════════════════════════════ */
 .avatar-editor-container {
   background: #f8f9fa;
   padding: 16px;
@@ -301,13 +760,82 @@ body { background:#f6f7fb; font-family: "One OS UI 1", system-ui, -apple-system,
   flex-wrap: wrap;
 }
 
+/* ── Avatar preview in edit modal (mirrors profile display) ── */
+.av-preview-outer {
+  position: relative;
+  width: 110px;
+  height: 110px;
+  flex-shrink: 0;
+  --av-scale: 1;
+  --av-tx: 0px;
+  --av-ty: 0px;
+}
+
+/* Clipped circle — img stays inside, never overflows */
+.av-preview-clip {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  overflow: hidden;
+  border: 3px solid #dee2e6;
+  background: #e5e7eb;
+  position: relative;
+  z-index: 1;
+}
+
+/* Img uses CSS vars for transform — clipped by parent */
+.av-preview-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+  display: block;
+  transform-origin: center center;
+  transform: scale(var(--av-scale)) translate(var(--av-tx), var(--av-ty));
+  transition: transform 0.15s ease;
+}
+
+/* Frame outside clip — never cropped */
+.av-preview-frame {
+  position: absolute;
+  inset: -3px;           /* cover the border */
+  width: calc(100% + 6px);
+  height: calc(100% + 6px);
+  object-fit: contain;
+  pointer-events: none;
+  z-index: 2;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   TRANSFORM CONTROLS (slider + number pairs)
+   ═══════════════════════════════════════════════════════════ */
+.transform-controls {
+  background: #fff;
+  border: 1px solid #e9ecef;
+  border-radius: 10px;
+  padding: 14px;
+  margin-top: 10px;
+}
+
+.transform-controls .form-range {
+  accent-color: var(--accent);
+}
+
+/* Sync number input width */
+.transform-controls input[type="number"] {
+  width: 68px;
+  text-align: center;
+  padding: 4px 6px;
+}
+
+/* ─── Shared form note ───────────────────────────────────── */
 .form-note {
   font-size: 0.85rem;
   color: #6c757d;
   line-height: 1.4;
 }
 
-/* Form validation feedback */
+/* ─── Form validation ────────────────────────────────────── */
 .form-control.is-valid {
   border-color: #198754;
   padding-right: calc(1.5em + 0.75rem);
@@ -326,34 +854,67 @@ body { background:#f6f7fb; font-family: "One OS UI 1", system-ui, -apple-system,
   background-size: calc(0.75em + 0.375rem) calc(0.75em + 0.375rem);
 }
 
-/* responsive */
-@media (max-width:900px){
-  .achievement-card { padding:14px; }
-  .profile-header { flex-direction:column; align-items:flex-start; gap:12px; }
-  .profile-avatar { width:80px; height:80px; }
-  
-  /* Comments modal responsive */
-  #profileCommentsList {
-    max-height: 350px;
+/* ═══════════════════════════════════════════════════════════
+   QUILL EDITORS
+   ═══════════════════════════════════════════════════════════ */
+#editorQuill .ql-editor { min-height: 180px; max-height: 520px; overflow: auto; }
+#bioEditQuill .ql-editor { min-height: 100px; max-height: 300px; overflow: auto; }
+
+/* ═══════════════════════════════════════════════════════════
+   RESPONSIVE
+   ═══════════════════════════════════════════════════════════ */
+@media (max-width: 900px) {
+  .achievement-card { padding: 14px; }
+
+  .profile-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
   }
-  
+
+  #profileCommentsList { max-height: 350px; }
+
   .comment-item[style*="margin-left"] {
     margin-left: 8px !important;
     padding-left: 8px !important;
   }
+
+  .profile-cover-banner {
+    height: var(--cover-height-sm);
+  }
+
+  .frame-grid {
+    grid-template-columns: repeat(auto-fill, minmax(90px, 1fr));
+  }
 }
 
-@media (max-width:576px){
+@media (max-width: 576px) {
   .avatar-editor-container {
     flex-direction: column;
   }
-  
+
   #avatarPreview {
     width: 80px !important;
     height: 80px !important;
   }
-  
-  #profileCommentsList {
-    max-height: 280px;
+
+  #profileCommentsList { max-height: 280px; }
+
+  .frame-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  .profile-avatar-wrapper {
+    margin-top: calc(-1 * var(--avatar-size-sm) / 2 - 6px);
+  }
+
+  .profile-avatar {
+    width: var(--avatar-size-sm);
+    height: var(--avatar-size-sm);
+  }
+
+  .transform-controls input[type="number"] {
+    width: 56px;
+    font-size: 0.82rem;
   }
 }
