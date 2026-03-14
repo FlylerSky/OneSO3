@@ -12,7 +12,7 @@
 </head>
 <body>
 
-  <!-- ═══════════════════════ NAVBAR ═══════════════════════ -->
+  <!-- ═════════════════════════ NAVBAR ═════════════════════════ -->
   <nav class="navbar bg-white shadow-sm py-2">
     <div class="container d-flex align-items-center justify-content-between">
       <div class="d-flex align-items-center gap-3">
@@ -25,8 +25,11 @@
           <i class="bi bi-search small-muted ms-2"></i>
           <input id="profileSearchInput" class="form-control form-control-sm border-0"
                  placeholder="Tìm trong bài viết của người này..." aria-label="search">
+          <button id="profileClearSearch" class="btn-clear-search" style="display:none;" type="button">
+            <i class="bi bi-x-circle-fill"></i>
+          </button>
         </div>
-        <div id="profileSearchResults" class="search-results"></div>
+        <div id="profileSearchResults" class="search-results profile-search-dropdown"></div>
       </div>
 
       <div class="d-flex align-items-center gap-2">
@@ -35,7 +38,7 @@
     </div>
   </nav>
 
-  <!-- ═══════════════════ OFFCANVAS MENU ═══════════════════ -->
+  <!-- ═════════════════════ OFFCANVAS MENU ═════════════════════ -->
   <div class="offcanvas offcanvas-start" tabindex="-1" id="profileMenuCanvas">
     <div class="offcanvas-header">
       <h5 class="offcanvas-title">Menu</h5>
@@ -57,11 +60,11 @@
       </a>
 
       <hr>
-      <div class="small-muted">Phiên bản: <span class="badge-trial">V3.2 ©Relife MDA</span></div>
+      <div class="small-muted">Phiên bản: <span class="badge-trial">V5.1 ©Relife MDA</span></div>
     </div>
   </div>
 
-  <!-- ═════════════════════ PROFILE AREA ═════════════════════ -->
+  <!-- ═════════════════════════ PROFILE AREA ═════════════════════════ -->
   <div class="container my-4">
     <!--
       profileArea renders:
@@ -77,7 +80,22 @@
     </div>
   </div>
 
-  <!-- ════════════════════ COMMENTS MODAL ════════════════════ -->
+  <!-- FIX 1: SEARCH RESULTS MODAL -->
+  <div class="modal fade" id="profileSearchModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-scrollable modal-lg">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h6 class="modal-title"><i class="bi bi-search me-2"></i>Kết quả tìm kiếm: <span id="profileSearchKeywordDisplay"></span></h6>
+          <button class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <div id="profileSearchModalResults"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ╔═══════════════════════════════════════════════╗ COMMENTS MODAL ╔════════════════════╗ -->
   <div class="modal fade" id="profileCommentsModal" tabindex="-1">
     <div class="modal-dialog modal-dialog-scrollable modal-lg">
       <div class="modal-content">
@@ -92,8 +110,20 @@
           </div>
           <div id="profileCommentBoxArea" style="display:none;">
             <div id="profileCommenterInfo" class="mb-2"></div>
-            <textarea id="profileCommentText" class="form-control mb-2" rows="3"
-                      placeholder="Viết bình luận..."></textarea>
+            <!-- FIX 5: reply indicator -->
+            <div id="profileReplyIndicator" class="reply-indicator mb-2" style="display:none;">
+              <i class="bi bi-reply-fill me-1"></i>
+              Đang trả lời: <strong id="profileReplyToName"></strong>
+              <button id="profileCancelReply" class="btn-cancel-reply ms-2" type="button">
+                <i class="bi bi-x"></i>
+              </button>
+            </div>
+            <div style="position:relative;">
+              <textarea id="profileCommentText" class="form-control mb-2" rows="3"
+                        placeholder="Viết bình luận... dùng @username để tag"></textarea>
+              <!-- FIX 5: mention dropdown -->
+              <div id="profileMentionDropdown" class="mention-dropdown" style="display:none;"></div>
+            </div>
             <div class="d-flex justify-content-end">
               <button id="profilePostCommentBtn" class="btn btn-primary btn-rounded">Gửi bình luận</button>
             </div>
@@ -103,7 +133,23 @@
     </div>
   </div>
 
-  <!-- ══════════════════ ACHIEVEMENTS MODAL ══════════════════ -->
+  <!-- FIX 5: REPORT OVERLAY + MODAL (fixed position, above everything) -->
+  <div id="profileReportOverlay" class="report-modal-overlay" style="display:none;"></div>
+  <div id="profileReportModal" class="report-modal" style="display:none;">
+    <h3><i class="bi bi-flag-fill me-2"></i>Báo cáo bình luận</h3>
+    <div class="report-reason">
+      <label><input type="radio" name="profileReportReason" value="spam"><span>Spam hoặc quảng cáo</span></label>
+      <label><input type="radio" name="profileReportReason" value="offensive"><span>Nội dung xúc phạm</span></label>
+      <label><input type="radio" name="profileReportReason" value="inappropriate"><span>Không phù hợp</span></label>
+      <label><input type="radio" name="profileReportReason" value="other" checked><span>Lý do khác</span></label>
+    </div>
+    <div class="report-buttons">
+      <button class="btn-cancel" onclick="window.profileCloseReportModal()">Hủy</button>
+      <button class="btn-danger" onclick="window.profileSubmitReport()">Báo cáo</button>
+    </div>
+  </div>
+
+  <!-- ════════════════════════ ACHIEVEMENTS MODAL ════════════════════════ -->
   <!--
     Two views inside one modal body:
       #achievementGroupList  — list of achievement groups (default view)
@@ -128,94 +174,33 @@
             <div class="achievement-group-card mb-3" id="groupCompanionship" role="button" tabindex="0">
               <div class="d-flex align-items-center gap-3">
                 <div class="achievement-group-icon bg-primary bg-opacity-10 rounded-3 p-3">
-                  <i class="bi bi-hourglass-split fs-3 text-primary"></i>
+                  <i class="bi bi-hourglass-split text-primary fs-3"></i>
                 </div>
                 <div class="flex-fill">
-                  <div class="fw-bold fs-6">Đồng hành</div>
-                  <div class="text-muted small">Thành tích theo mốc thời gian đồng hành cùng Relife</div>
+                  <div class="fw-bold">Đồng hành</div>
+                  <div class="text-muted small">Mốc thời gian kể từ khi tham gia Relife</div>
                   <div id="companionshipSummary" class="mt-1"></div>
                 </div>
-                <i class="bi bi-chevron-right text-muted fs-5"></i>
+                <i class="bi bi-chevron-right text-muted"></i>
               </div>
             </div>
+          </div>
 
-            <!-- More groups can be added here in the future -->
-            <div class="text-center text-muted small py-2">
-              <i class="bi bi-plus-circle me-1"></i>Thêm nhóm thành tích sẽ được bổ sung trong tương lai
-            </div>
-
-          </div><!-- /#achievementGroupList -->
-
-          <!-- ── DETAIL VIEW: Đồng hành ── -->
+          <!-- ── DETAIL VIEW ── -->
           <div id="achievementDetailCompanionship" style="display:none;">
-            <button class="btn btn-sm btn-outline-secondary mb-3" id="backToGroupsBtn">
+            <button id="backToGroupsBtn" class="btn btn-sm btn-outline-secondary mb-3">
               <i class="bi bi-arrow-left me-1"></i>Quay lại
             </button>
-            <h6 class="fw-bold mb-3">
-              <i class="bi bi-hourglass-split me-2 text-primary"></i>Thành tích Đồng hành
-            </h6>
+            <h6 class="fw-bold mb-3"><i class="bi bi-hourglass-split me-1"></i>Đồng hành</h6>
             <div id="achievementsContainer" class="row g-3"></div>
           </div>
 
-        </div><!-- /.modal-body -->
-      </div>
-    </div>
-  </div>
-
-  <!-- ══════════════════ AVATAR FRAME MODAL ══════════════════ -->
-  <div class="modal fade" id="avatarFrameModal" tabindex="-1">
-    <div class="modal-dialog modal-dialog-centered modal-lg modal-dialog-scrollable">
-      <div class="modal-content">
-        <div class="modal-header">
-          <h5 class="modal-title">
-            <i class="bi bi-circle-square me-2"></i>Chọn khung avatar
-          </h5>
-          <button class="btn-close" data-bs-dismiss="modal"></button>
-        </div>
-
-        <div class="modal-body">
-
-          <!-- Current preview -->
-          <div class="text-center mb-4">
-            <div class="frame-preview-wrapper mx-auto" id="frameModalPreview">
-              <!-- injected by JS: avatar img + frame overlay -->
-            </div>
-            <div class="text-muted small mt-2" id="frameModalPreviewLabel">Xem trước</div>
-          </div>
-
-          <!-- Free frames -->
-          <div class="mb-4">
-            <div class="d-flex align-items-center gap-2 mb-2">
-              <span class="badge bg-success">Miễn phí</span>
-              <span class="text-muted small">Luôn có sẵn cho tất cả thành viên</span>
-            </div>
-            <div id="freeFramesGrid" class="frame-grid"></div>
-          </div>
-
-          <hr class="my-3">
-
-          <!-- Special frames -->
-          <div>
-            <div class="d-flex align-items-center gap-2 mb-2">
-              <span class="badge bg-warning text-dark">Đặc biệt</span>
-              <span class="text-muted small">Mở khóa khi hoàn thành thành tích Đồng hành</span>
-            </div>
-            <div id="specialFramesGrid" class="frame-grid"></div>
-          </div>
-
-        </div><!-- /.modal-body -->
-
-        <div class="modal-footer">
-          <button class="btn btn-secondary" data-bs-dismiss="modal">Hủy</button>
-          <button id="applyFrameBtn" class="btn btn-primary btn-rounded">
-            <i class="bi bi-check2-circle me-1"></i>Áp dụng khung
-          </button>
         </div>
       </div>
     </div>
   </div>
 
-  <!-- ════════════════════ VISITORS MODAL ════════════════════ -->
+  <!-- ╔════════════════════╗ VISITORS MODAL ╔════════════════════╗ -->
   <div class="modal fade" id="visitorsModal" tabindex="-1" style="z-index:5052;">
     <div class="modal-dialog modal-dialog-scrollable modal-md">
       <div class="modal-content">
@@ -230,7 +215,7 @@
     </div>
   </div>
 
-  <!-- ══════════════════ POST EDITOR MODAL ══════════════════ -->
+  <!-- ═══════════════════════ POST EDITOR MODAL ═══════════════════════ -->
   <div class="modal fade" id="postEditorModal" tabindex="-1">
     <div class="modal-dialog modal-dialog-centered modal-lg">
       <div class="modal-content">
@@ -251,7 +236,7 @@
     </div>
   </div>
 
-  <!-- ════════════════ PROFILE EDIT MODAL ════════════════════
+  <!-- ╔══════════════════ PROFILE EDIT MODAL ╔════════════════════════════════
        JS renders form content into #profileEditModalBody.
        Form sections (all inside modal, no inline editArea):
          1. Ảnh bìa  (coverPhotoUrl + cover transform sliders)
@@ -292,54 +277,33 @@
               <i class="bi bi-info-circle me-1"></i>
               Chỉ nhập URL ảnh từ internet. Ảnh lý tưởng nên rộng ~1200px.
             </div>
-
-            <!-- Cover transform controls -->
-            <div class="transform-controls" id="coverTransformControls" style="display:none;">
-              <div class="row g-2 align-items-center mb-1">
-                <div class="col-4 text-end small text-muted">Phóng to/thu nhỏ</div>
-                <div class="col-6">
-                  <input type="range" class="form-range" id="coverScale"
-                         min="50" max="200" step="1" value="100">
-                </div>
-                <div class="col-2">
-                  <input type="number" class="form-control form-control-sm"
-                         id="coverScaleNum" min="50" max="200" value="100">
-                </div>
-              </div>
-              <div class="row g-2 align-items-center mb-1">
-                <div class="col-4 text-end small text-muted">Di chuyển ngang</div>
-                <div class="col-6">
-                  <input type="range" class="form-range" id="coverTranslateX"
-                         min="-200" max="200" step="1" value="0">
-                </div>
-                <div class="col-2">
-                  <input type="number" class="form-control form-control-sm"
-                         id="coverTranslateXNum" min="-200" max="200" value="0">
-                </div>
-              </div>
-              <div class="row g-2 align-items-center mb-1">
-                <div class="col-4 text-end small text-muted">Di chuyển dọc</div>
-                <div class="col-6">
-                  <input type="range" class="form-range" id="coverTranslateY"
-                         min="-200" max="200" step="1" value="0">
-                </div>
-                <div class="col-2">
-                  <input type="number" class="form-control form-control-sm"
-                         id="coverTranslateYNum" min="-200" max="200" value="0">
-                </div>
-              </div>
-              <button type="button" id="resetCoverTransformBtn"
-                      class="btn btn-sm btn-outline-secondary mt-1">
-                <i class="bi bi-arrow-counterclockwise me-1"></i>Đặt lại vị trí
-              </button>
-            </div>
-
-            <div class="avatar-editor-buttons mt-2">
+            <div class="d-flex gap-2 mb-2">
               <button type="button" id="testCoverBtn" class="btn btn-sm btn-outline-primary">
                 <i class="bi bi-eye me-1"></i>Xem trước
               </button>
               <button type="button" id="clearCoverBtn" class="btn btn-sm btn-outline-secondary">
                 <i class="bi bi-x-circle me-1"></i>Xóa ảnh bìa
+              </button>
+            </div>
+            <!-- Cover transform controls -->
+            <div class="transform-controls" id="coverTransformControls" style="display:none;">
+              <div class="row g-2 align-items-center mb-1">
+                <div class="col-4 text-end small text-muted">Phóng to/thu nhỏ</div>
+                <div class="col-6"><input type="range" class="form-range" id="coverScale" min="50" max="200" step="1" value="100"></div>
+                <div class="col-2"><input type="number" class="form-control form-control-sm" id="coverScaleNum" min="50" max="200" value="100"></div>
+              </div>
+              <div class="row g-2 align-items-center mb-1">
+                <div class="col-4 text-end small text-muted">Di chuyển ngang</div>
+                <div class="col-6"><input type="range" class="form-range" id="coverTranslateX" min="-200" max="200" step="1" value="0"></div>
+                <div class="col-2"><input type="number" class="form-control form-control-sm" id="coverTranslateXNum" min="-200" max="200" value="0"></div>
+              </div>
+              <div class="row g-2 align-items-center mb-1">
+                <div class="col-4 text-end small text-muted">Di chuyển dọc</div>
+                <div class="col-6"><input type="range" class="form-range" id="coverTranslateY" min="-200" max="200" step="1" value="0"></div>
+                <div class="col-2"><input type="number" class="form-control form-control-sm" id="coverTranslateYNum" min="-200" max="200" value="0"></div>
+              </div>
+              <button type="button" id="resetCoverTransformBtn" class="btn btn-sm btn-outline-secondary mt-1">
+                <i class="bi bi-arrow-counterclockwise me-1"></i>Đặt lại vị trí
               </button>
             </div>
           </div>
@@ -382,39 +346,20 @@
             <div class="transform-controls mt-3" id="avatarTransformControls" style="display:none;">
               <div class="row g-2 align-items-center mb-1">
                 <div class="col-4 text-end small text-muted">Phóng to/thu nhỏ</div>
-                <div class="col-6">
-                  <input type="range" class="form-range" id="avatarScale"
-                         min="50" max="200" step="1" value="100">
-                </div>
-                <div class="col-2">
-                  <input type="number" class="form-control form-control-sm"
-                         id="avatarScaleNum" min="50" max="200" value="100">
-                </div>
+                <div class="col-6"><input type="range" class="form-range" id="avatarScale" min="50" max="200" step="1" value="100"></div>
+                <div class="col-2"><input type="number" class="form-control form-control-sm" id="avatarScaleNum" min="50" max="200" value="100"></div>
               </div>
               <div class="row g-2 align-items-center mb-1">
                 <div class="col-4 text-end small text-muted">Di chuyển ngang</div>
-                <div class="col-6">
-                  <input type="range" class="form-range" id="avatarTranslateX"
-                         min="-100" max="100" step="1" value="0">
-                </div>
-                <div class="col-2">
-                  <input type="number" class="form-control form-control-sm"
-                         id="avatarTranslateXNum" min="-100" max="100" value="0">
-                </div>
+                <div class="col-6"><input type="range" class="form-range" id="avatarTranslateX" min="-100" max="100" step="1" value="0"></div>
+                <div class="col-2"><input type="number" class="form-control form-control-sm" id="avatarTranslateXNum" min="-100" max="100" value="0"></div>
               </div>
               <div class="row g-2 align-items-center mb-1">
                 <div class="col-4 text-end small text-muted">Di chuyển dọc</div>
-                <div class="col-6">
-                  <input type="range" class="form-range" id="avatarTranslateY"
-                         min="-100" max="100" step="1" value="0">
-                </div>
-                <div class="col-2">
-                  <input type="number" class="form-control form-control-sm"
-                         id="avatarTranslateYNum" min="-100" max="100" value="0">
-                </div>
+                <div class="col-6"><input type="range" class="form-range" id="avatarTranslateY" min="-100" max="100" step="1" value="0"></div>
+                <div class="col-2"><input type="number" class="form-control form-control-sm" id="avatarTranslateYNum" min="-100" max="100" value="0"></div>
               </div>
-              <button type="button" id="resetAvatarTransformBtn"
-                      class="btn btn-sm btn-outline-secondary mt-1">
+              <button type="button" id="resetAvatarTransformBtn" class="btn btn-sm btn-outline-secondary mt-1">
                 <i class="bi bi-arrow-counterclockwise me-1"></i>Đặt lại vị trí
               </button>
             </div>
@@ -446,7 +391,7 @@
 
           <hr>
 
-          <!-- ── SECTION 4: TÊN & TAG ── -->
+          <!-- ── SECTION 4: TÊ N & TAG ── -->
           <h6 class="fw-bold mb-2"><i class="bi bi-person-badge me-1"></i>Thông tin cơ bản</h6>
           <div class="row g-3 mb-3">
             <div class="col-12">
@@ -509,7 +454,60 @@
     </div>
   </div>
 
-  <!-- ═══════════════════════ LOGIN MODAL ═══════════════════════ -->
+  <!-- ╔════════════════════╗ AVATAR FRAME MODAL ╔════════════════════╗ -->
+  <div class="modal fade" id="avatarFrameModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered modal-lg modal-dialog-scrollable">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">
+            <i class="bi bi-circle-square me-2"></i>Chọn khung avatar
+          </h5>
+          <button class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+
+        <div class="modal-body">
+
+          <!-- Current preview -->
+          <div class="text-center mb-4">
+            <div class="frame-preview-wrapper mx-auto" id="frameModalPreview">
+              <!-- injected by JS: avatar img + frame overlay -->
+            </div>
+            <div class="text-muted small mt-2" id="frameModalPreviewLabel">Xem trước</div>
+          </div>
+
+          <!-- Free frames -->
+          <div class="mb-4">
+            <div class="d-flex align-items-center gap-2 mb-2">
+              <span class="badge bg-success">Miễn phí</span>
+              <span class="text-muted small">Luôn có sẵn cho tất cả thành viên</span>
+            </div>
+            <div id="freeFramesGrid" class="frame-grid"></div>
+          </div>
+
+          <hr class="my-3">
+
+          <!-- Special frames -->
+          <div>
+            <div class="d-flex align-items-center gap-2 mb-2">
+              <span class="badge bg-warning text-dark">Đặc biệt</span>
+              <span class="text-muted small">Mở khóa khi hoàn thành thành tích Đồng hành</span>
+            </div>
+            <div id="specialFramesGrid" class="frame-grid"></div>
+          </div>
+
+        </div><!-- /.modal-body -->
+
+        <div class="modal-footer">
+          <button class="btn btn-secondary" data-bs-dismiss="modal">Hủy</button>
+          <button id="applyFrameBtn" class="btn btn-primary btn-rounded">
+            <i class="bi bi-check2-circle me-1"></i>Áp dụng khung
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═════════════════════════ LOGIN MODAL ═════════════════════════ -->
   <div class="modal fade" id="loginModalProfile" tabindex="-1">
     <div class="modal-dialog modal-dialog-centered modal-sm">
       <div class="modal-content">
@@ -529,20 +527,77 @@
     </div>
   </div>
 
-  <!-- ═══════════════════════ SCRIPTS ═══════════════════════ -->
+  <!-- ╔════════════════════╗ PROFILE INFO MODAL ╔════════════════════╗ -->
+  <div class="modal fade" id="profileInfoModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h6 class="modal-title"><i class="bi bi-person-lines-fill me-2"></i>Thông tin chi tiết</h6>
+          <button class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body" id="profileInfoModalBody">
+          <!-- Filled by openProfileInfoModal() -->
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ╔════════════════════╗ IMAGE VIEWER OVERLAY ╔════════════════════╗ -->
+  <div id="profileImgViewer" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.88);z-index:9999;cursor:zoom-out;flex-direction:column;align-items:center;justify-content:center;gap:12px;">
+    <button onclick="window.profileCloseImageViewer()"
+            style="position:absolute;top:16px;right:16px;background:rgba(255,255,255,.15);border:none;color:#fff;border-radius:50%;width:40px;height:40px;font-size:1.2rem;cursor:pointer;display:flex;align-items:center;justify-content:center;">
+      <i class="bi bi-x-lg"></i>
+    </button>
+    <img id="profileImgViewerImg" src="" alt="preview"
+         style="max-width:90vw;max-height:85vh;object-fit:contain;border-radius:12px;box-shadow:0 8px 40px rgba(0,0,0,.5);"
+         onclick="event.stopPropagation()">
+  </div>
+
+  <!-- ═════════════════════════ SCRIPTS ═════════════════════════ -->
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/quill@2.0.2/dist/quill.js"></script>
   <!-- avatar_frames_data.js là plain script (không có import/export) → load thường -->
   <script src="JS/avatar_frames_data.js"></script>
-  <!-- Expose AVATAR_FRAMES lên window để ES module profile.js có thể đọc -->
+  <!-- Safety net: nếu avatar_frames_data.js bị crash (v.d. btoa cũ),
+       định nghĩa window.AVATAR_FRAMES inline để frame picker luôn hoạt động -->
   <script>
-    try {
-      if (typeof AVATAR_FRAMES !== 'undefined') {
-        window.AVATAR_FRAMES    = AVATAR_FRAMES;
-        window.getAllFrames      = typeof getAllFrames     === 'function' ? getAllFrames     : function(){ return [].concat(AVATAR_FRAMES.free, AVATAR_FRAMES.special); };
-        window.checkFrameUnlock = typeof checkFrameUnlock === 'function' ? checkFrameUnlock : function(){ return false; };
-      }
-    } catch(e) { console.warn('avatar_frames_data expose failed', e); }
+    if (!window.AVATAR_FRAMES) {
+      console.warn('[Relife] avatar_frames_data.js did not set window.AVATAR_FRAMES — using inline fallback');
+      (function () {
+        function svg(s) { return 'data:image/svg+xml,' + encodeURIComponent(s); }
+        window.AVATAR_FRAMES = {
+          free: [
+            { id: 'none',          name: 'Không khung',          type: 'free', image: null, unlocked: true },
+            { id: 'classic_gold',  name: 'Vàng cổ điển',        type: 'free', unlocked: true,  image: svg('<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg"><defs><linearGradient id="g1" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#FFD700"/><stop offset="100%" stop-color="#FFA500"/></linearGradient></defs><circle cx="100" cy="100" r="96" fill="none" stroke="url(#g1)" stroke-width="8"/></svg>') },
+            { id: 'silver_circle', name: 'Bạc đơn giản',        type: 'free', unlocked: true,  image: svg('<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg"><defs><linearGradient id="g2" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#C8C8C8"/><stop offset="100%" stop-color="#808080"/></linearGradient></defs><circle cx="100" cy="100" r="96" fill="none" stroke="url(#g2)" stroke-width="8"/></svg>') }
+          ],
+          special: [
+            { id: 'bronze_star',     type: 'special', name: 'Sao đồng',                requirement: '1_day',    requirementText: '1 Ngày',   unlocked: false, image: svg('<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg"><circle cx="100" cy="100" r="96" fill="none" stroke="#CD7F32" stroke-width="10"/></svg>') },
+            { id: 'emerald_ring',    type: 'special', name: 'Nhẫn ngọc lục bảo',  requirement: '1_week',   requirementText: '1 Tuần',  unlocked: false, image: svg('<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg"><circle cx="100" cy="100" r="96" fill="none" stroke="#50C878" stroke-width="12"/></svg>') },
+            { id: 'sapphire_crown',  type: 'special', name: 'Vương miện sapphire',  requirement: '1_month',  requirementText: '1 Tháng', unlocked: false, image: svg('<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg"><circle cx="100" cy="100" r="96" fill="none" stroke="#4B8EF0" stroke-width="10"/></svg>') },
+            { id: 'ruby_flame',      type: 'special', name: 'Ngọn lửa ruby',             requirement: '1_year',   requirementText: '1 Năm',   unlocked: false, image: svg('<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg"><circle cx="100" cy="100" r="96" fill="none" stroke="#FF4444" stroke-width="12"/></svg>') },
+            { id: 'diamond_aura',    type: 'special', name: 'Hào quang kim cương',   requirement: '2_years',  requirementText: '2 Năm',   unlocked: false, image: svg('<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg"><circle cx="100" cy="100" r="96" fill="none" stroke="#7DD3FC" stroke-width="12"/></svg>') },
+            { id: 'amethyst_vortex', type: 'special', name: 'Xoáy tím amethyst',           requirement: '3_years',  requirementText: '3 Năm',   unlocked: false, image: svg('<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg"><circle cx="100" cy="100" r="96" fill="none" stroke="#C084FC" stroke-width="14"/></svg>') },
+            { id: 'aurora_borealis', type: 'special', name: 'Cực quang bắc',            requirement: '5_years',  requirementText: '5 Năm',   unlocked: false, image: svg('<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg"><defs><linearGradient id="gA" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#00C9FF"/><stop offset="50%" stop-color="#92FE9D"/><stop offset="100%" stop-color="#FC5C7D"/></linearGradient></defs><circle cx="100" cy="100" r="96" fill="none" stroke="url(#gA)" stroke-width="14"/></svg>') },
+            { id: 'eternal_galaxy',  type: 'special', name: 'Thiên hà vĩnh cửu',   requirement: '10_years', requirementText: '10 Năm',  unlocked: false, image: svg('<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg"><defs><linearGradient id="gG" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#191970"/><stop offset="50%" stop-color="#8B008B"/><stop offset="100%" stop-color="#191970"/></linearGradient></defs><circle cx="100" cy="100" r="96" fill="none" stroke="url(#gG)" stroke-width="16"/></svg>') }
+          ]
+        };
+        var T = { '1_day': 86400000, '1_week': 604800000, '1_month': 2592000000, '1_year': 31536000000,
+                  '2_years': 63072000000, '3_years': 94608000000, '5_years': 157680000000, '10_years': 315360000000 };
+        window.checkFrameUnlock = function (id, data) {
+          var all = window.AVATAR_FRAMES.free.concat(window.AVATAR_FRAMES.special);
+          var f = all.find(function (x) { return x.id === id; });
+          if (!f || f.type === 'free') return true;
+          if (!data) return false;
+          if (data._createdAt) {
+            var c = data._createdAt instanceof Date ? data._createdAt : new Date(data._createdAt);
+            return (Date.now() - c.getTime()) >= (T[f.requirement] || Infinity);
+          }
+          return !!(data[f.requirement] && data[f.requirement].completed);
+        };
+        window.getAllFrames = function () { return window.AVATAR_FRAMES.free.concat(window.AVATAR_FRAMES.special); };
+      })();
+    }
   </script>
   <!-- featureFlags.js là ES module → profile.js import trực tiếp -->
   <script type="module" src="JS/profile.js"></script>

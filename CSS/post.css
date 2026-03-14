@@ -15,25 +15,28 @@
    ROOT VARIABLES
    ============================================ */
 :root {
-  /* Glass Effect - MINIMAL */
   --glass-bg: rgba(255, 255, 255, 0.9);
   --glass-border: rgba(142, 142, 147, 0.15);
   --glass-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
-  
-  /* Colors */
+
+  /* Comment card tokens */
+  --comment-bg: rgba(255, 255, 255, 0.8);
+  --comment-bg-hover: rgba(255, 255, 255, 0.95);
+  --comment-border: rgba(142, 142, 147, 0.15);
+  --comment-shadow: none;
+  --comment-reply-bg: rgba(0, 122, 255, 0.05);
+
   --liquid-primary: #007AFF;
   --liquid-secondary: #5856D6;
   --liquid-accent: #FF2D55;
   --liquid-success: #34C759;
   --liquid-warning: #FF9500;
   --liquid-danger: #FF3B30;
-  
-  /* Text */
+
   --text-primary: #1d1d1f;
   --text-secondary: #86868b;
   --text-tertiary: #6e6e73;
-  
-  /* Spacing */
+
   --spacing-xs: 4px;
   --spacing-sm: 8px;
   --spacing-md: 16px;
@@ -69,7 +72,7 @@ body {
 .relife-orb-1,
 .relife-orb-2,
 .relife-orb-3 {
-  display: none; /* Completely disabled for performance */
+  display: none;
 }
 
 /* ============================================
@@ -79,16 +82,17 @@ body {
   max-width: 900px;
   margin: 0 auto;
   padding: var(--spacing-lg);
+  /* [#4] Thêm padding-top để nội dung không bị header sticky che */
+  padding-top: calc(var(--spacing-lg) + 72px);
   position: relative;
   z-index: 1;
 }
 
 /* ============================================
-   HEADER
+   HEADER — [#4] STICKY + SCROLL HIDE/SHOW
    ============================================ */
 .relife-header {
   display: flex;
-  justify-content: space-between;
   align-items: center;
   padding: var(--spacing-md) var(--spacing-lg);
   background: var(--glass-bg);
@@ -98,9 +102,33 @@ body {
   box-shadow: var(--glass-shadow);
 }
 
+/* [#4] Sticky behaviour */
+.relife-header--sticky {
+  position: fixed;
+  top: var(--spacing-md);
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(900px, calc(100% - var(--spacing-lg) * 2));
+  z-index: 1000;
+  margin-bottom: 0;
+  /* Transition để ẩn/hiện mượt */
+  transition: opacity 0.25s ease, transform 0.25s ease;
+  opacity: 1;
+  /* translateX giữ căn giữa, translateY dùng để ẩn lên trên */
+  transform: translateX(-50%) translateY(0);
+}
+
+/* [#4] Trạng thái ẩn — JS thêm class này khi scroll xuống */
+.relife-header--sticky.header-hidden {
+  opacity: 0;
+  transform: translateX(-50%) translateY(-110%);
+  pointer-events: none;
+}
+
 .relife-back-btn {
   width: 40px;
   height: 40px;
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -121,28 +149,44 @@ body {
 
 .relife-page-title {
   flex: 1;
-  margin-left: var(--spacing-md);
+  min-width: 0;
+  margin: 0 var(--spacing-md);
 }
 
-.relife-page-title h4 {
+/* [#2] Tiêu đề bài viết hiển thị trong header — truncate + click mở modal */
+.relife-post-title-header {
+  font-size: 0.9375rem;
   font-weight: 700;
-  font-size: 1.5rem;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   margin: 0;
-  background: linear-gradient(135deg, var(--liquid-primary), var(--liquid-secondary));
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+  /* Khi là placeholder ban đầu */
+  color: var(--text-secondary);
+  transition: color 0.2s ease;
 }
 
-.relife-subtitle {
-  font-size: 0.875rem;
-  color: var(--text-secondary);
-  margin-top: 2px;
+/* Khi đã có tiêu đề thật */
+.relife-post-title-header.has-title {
+  color: var(--text-primary);
+}
+
+/* [#2] Khi tiêu đề bị cắt — cursor pointer, gợi ý có thể click */
+.relife-post-title-header.is-truncated {
+  cursor: pointer;
+  color: var(--liquid-primary);
+}
+
+.relife-post-title-header.is-truncated:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
 
 .relife-actions {
   display: flex;
   gap: 8px;
+  flex-shrink: 0;
 }
 
 .relife-icon-btn {
@@ -166,6 +210,97 @@ body {
 }
 
 /* ============================================
+   [#2] TITLE FULL MODAL
+   ============================================ */
+.relife-title-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  z-index: 2000;
+  display: none;
+  animation: fadeIn 0.2s ease;
+}
+
+.relife-title-modal-overlay.show {
+  display: block;
+}
+
+.relife-title-modal {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%) scale(0.95);
+  background: white;
+  border-radius: 20px;
+  padding: 0;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.25);
+  max-width: 480px;
+  width: calc(100% - var(--spacing-xl));
+  z-index: 2001;
+  display: none;
+  overflow: hidden;
+  transition: transform 0.2s ease, opacity 0.2s ease;
+  opacity: 0;
+}
+
+.relife-title-modal.show {
+  display: block;
+  transform: translate(-50%, -50%) scale(1);
+  opacity: 1;
+}
+
+.relife-title-modal-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--glass-border);
+  background: rgba(0, 122, 255, 0.04);
+}
+
+.relife-title-modal-header i {
+  color: var(--liquid-primary);
+  font-size: 1.2rem;
+}
+
+.relife-title-modal-header span {
+  flex: 1;
+  font-weight: 700;
+  font-size: 0.9375rem;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.relife-title-modal-close {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(142, 142, 147, 0.15);
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+  color: var(--text-secondary);
+  transition: background 0.2s ease, color 0.2s ease;
+}
+
+.relife-title-modal-close:hover {
+  background: rgba(255, 59, 48, 0.15);
+  color: var(--liquid-danger);
+}
+
+.relife-title-modal-body {
+  padding: 20px;
+  font-size: 1.125rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  line-height: 1.5;
+  word-break: break-word;
+}
+
+/* ============================================
    GLASS CARD
    ============================================ */
 .relife-glass-card {
@@ -179,27 +314,24 @@ body {
   animation: fadeInUp 0.3s ease;
 }
 
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
 @keyframes fadeInUp {
-  from {
-    opacity: 0;
-    transform: translateY(20px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+  from { opacity: 0; transform: translateY(20px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
 
 .relife-glass-card::before {
   content: '';
   position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
+  top: 0; left: 0; right: 0;
   height: 1px;
-  background: linear-gradient(90deg, 
-    transparent 0%, 
-    rgba(142, 142, 147, 0.3) 50%, 
+  background: linear-gradient(90deg,
+    transparent 0%,
+    rgba(142, 142, 147, 0.3) 50%,
     transparent 100%
   );
 }
@@ -211,10 +343,12 @@ body {
   margin-bottom: var(--spacing-xl);
 }
 
-/* Post Header */
+/* ============================================
+   POST HEADER — [#1] Layout gọn: avatar | (tên \n tag+thời gian) | follow
+   ============================================ */
 .relife-post-header {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: var(--spacing-md);
   margin-bottom: var(--spacing-lg);
   padding-bottom: var(--spacing-lg);
@@ -222,34 +356,43 @@ body {
 }
 
 .relife-author-avatar {
-  width: 56px;
-  height: 56px;
+  width: 48px;
+  height: 48px;
   border-radius: 50%;
   object-fit: cover;
-  border: 3px solid rgba(0, 122, 255, 0.2);
+  border: 2px solid rgba(0, 122, 255, 0.2);
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
   cursor: pointer;
   transition: transform 0.2s ease;
+  flex-shrink: 0;
+  align-self: flex-start;
 }
 
 .relife-author-avatar:hover {
   transform: scale(1.05);
 }
 
+/* [#1] Cột giữa: tên trên, tag+thời gian dưới */
 .relife-author-info {
   flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 
 .relife-author-name {
-  font-size: 1.25rem;
+  font-size: 1rem;
   font-weight: 700;
   color: var(--text-primary);
-  margin-bottom: 4px;
   cursor: pointer;
   display: inline-flex;
   align-items: center;
   gap: 6px;
   transition: color 0.2s ease;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .relife-author-name:hover {
@@ -260,30 +403,35 @@ body {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  padding: 3px 10px;
+  padding: 2px 8px;
   background: linear-gradient(135deg, var(--liquid-primary), var(--liquid-secondary));
   color: white;
   border-radius: 999px;
-  font-size: 0.7rem;
+  font-size: 0.65rem;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.5px;
-  vertical-align: middle;
+  flex-shrink: 0;
 }
 
+/* [#1] Dòng dưới: tag + thời gian nằm cùng hàng */
 .relife-author-meta {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   flex-wrap: wrap;
 }
 
 .relife-author-tag {
   color: var(--liquid-primary);
-  font-size: 0.9375rem;
+  font-size: 0.875rem;
   font-weight: 600;
   cursor: pointer;
   transition: color 0.2s ease;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 160px;
 }
 
 .relife-author-tag:hover {
@@ -294,36 +442,40 @@ body {
 .relife-post-time {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
   color: var(--text-secondary);
-  font-size: 0.875rem;
+  font-size: 0.8125rem;
+  white-space: nowrap;
 }
 
 .relife-trial-badge {
   background: linear-gradient(135deg, #FFC107, #FF9800);
   color: white;
-  padding: 4px 12px;
+  padding: 3px 10px;
   border-radius: 999px;
-  font-size: 0.75rem;
+  font-size: 0.7rem;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
 
+/* [#1] Nút follow nằm cuối, không bị kéo giãn */
 .relife-follow-btn {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 8px 20px;
+  padding: 7px 18px;
   background: linear-gradient(135deg, var(--liquid-primary), var(--liquid-secondary));
   color: white;
   border: none;
   border-radius: 999px;
   font-weight: 700;
-  font-size: 0.9rem;
+  font-size: 0.875rem;
   cursor: pointer;
   transition: transform 0.2s ease, box-shadow 0.2s ease;
   box-shadow: 0 2px 8px rgba(0, 122, 255, 0.3);
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 
 .relife-follow-btn:hover {
@@ -347,7 +499,9 @@ body {
   cursor: not-allowed;
 }
 
-/* Post Title */
+/* ============================================
+   POST TITLE
+   ============================================ */
 .relife-post-title {
   font-size: 2rem;
   font-weight: 800;
@@ -356,7 +510,9 @@ body {
   line-height: 1.3;
 }
 
-/* Post Content */
+/* ============================================
+   POST CONTENT
+   ============================================ */
 .post-content {
   font-size: 1.0625rem;
   line-height: 1.75;
@@ -366,11 +522,9 @@ body {
   overflow-wrap: break-word;
 }
 
-.post-content p {
-  margin-bottom: 1.25rem;
-}
+.post-content p { margin-bottom: 1.25rem; }
 
-.post-content h1, .post-content h2, .post-content h3, 
+.post-content h1, .post-content h2, .post-content h3,
 .post-content h4, .post-content h5, .post-content h6 {
   font-weight: 700;
   margin-top: 1.75rem;
@@ -385,15 +539,8 @@ body {
 .post-content h5 { font-size: 1.125rem; }
 .post-content h6 { font-size: 1rem; }
 
-.post-content strong {
-  font-weight: 700;
-  color: var(--text-primary);
-}
-
-.post-content em {
-  font-style: italic;
-  color: var(--text-tertiary);
-}
+.post-content strong { font-weight: 700; color: var(--text-primary); }
+.post-content em { font-style: italic; color: var(--text-tertiary); }
 
 .post-content a {
   color: var(--liquid-primary);
@@ -401,38 +548,18 @@ body {
   border-bottom: 1px solid transparent;
   transition: border-color 0.2s ease;
 }
+.post-content a:hover { border-bottom-color: var(--liquid-primary); }
 
-.post-content a:hover {
-  border-bottom-color: var(--liquid-primary);
-}
-
-/* Lists */
-.post-content ul,
-.post-content ol {
+.post-content ul, .post-content ol {
   margin-left: 1.5rem;
   margin-bottom: 1.25rem;
   padding-left: 0.5rem;
 }
+.post-content ul  { list-style-type: disc; }
+.post-content ol  { list-style-type: decimal; }
+.post-content li  { margin-bottom: 0.5rem; padding-left: 0.5rem; }
+.post-content li::marker { color: var(--liquid-primary); font-weight: 600; }
 
-.post-content ul {
-  list-style-type: disc;
-}
-
-.post-content ol {
-  list-style-type: decimal;
-}
-
-.post-content li {
-  margin-bottom: 0.5rem;
-  padding-left: 0.5rem;
-}
-
-.post-content li::marker {
-  color: var(--liquid-primary);
-  font-weight: 600;
-}
-
-/* Blockquote */
 .post-content blockquote {
   margin: 1.5rem 0;
   padding: 1rem 1.5rem;
@@ -443,7 +570,6 @@ body {
   color: var(--text-tertiary);
 }
 
-/* Code */
 .post-content code {
   background: rgba(142, 142, 147, 0.1);
   padding: 2px 8px;
@@ -453,23 +579,8 @@ body {
   color: var(--liquid-accent);
 }
 
-.post-content pre {
-  background: rgba(28, 28, 30, 0.95);
-  color: #f5f5f7;
-  padding: 1.25rem;
-  border-radius: 12px;
-  overflow-x: auto;
-  margin: 1.5rem 0;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-}
+.post-content pre code { background: none; padding: 0; color: inherit; }
 
-.post-content pre code {
-  background: none;
-  padding: 0;
-  color: inherit;
-}
-
-/* Images & Media */
 .post-content img,
 .post-content video {
   max-width: 100%;
@@ -481,12 +592,8 @@ body {
   cursor: zoom-in;
   transition: transform 0.2s ease;
 }
+.post-content img:hover { transform: scale(1.01); }
 
-.post-content img:hover {
-  transform: scale(1.01);
-}
-
-/* iFrame Wrapper */
 .post-content .iframe-wrapper {
   position: relative;
   width: 100%;
@@ -497,17 +604,13 @@ body {
   margin: 1.5rem 0;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
-
 .post-content .iframe-wrapper iframe {
   position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
   border: 0;
 }
 
-/* Table */
 .post-content .table-wrapper {
   width: 100%;
   overflow-x: auto;
@@ -515,27 +618,188 @@ body {
   border-radius: 12px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
 }
-
-.post-content table {
-  width: 100%;
-  border-collapse: collapse;
-  background: white;
-}
-
+.post-content table { width: 100%; border-collapse: collapse; background: white; }
 .post-content th,
-.post-content td {
-  padding: 12px 16px;
-  text-align: left;
-  border-bottom: 1px solid rgba(142, 142, 147, 0.15);
-}
+.post-content td { padding: 12px 16px; text-align: left; border-bottom: 1px solid rgba(142, 142, 147, 0.15); }
+.post-content th { background: rgba(0, 122, 255, 0.05); font-weight: 700; color: var(--liquid-primary); }
 
-.post-content th {
+/* ============================================
+   QUILL FULL FORMAT SUPPORT
+   ============================================ */
+
+/* ── Quill size classes ── */
+.post-content .ql-size-small  { font-size: 0.75em; }
+.post-content .ql-size-large  { font-size: 1.5em; }
+.post-content .ql-size-huge   { font-size: 2.5em; }
+
+/* ── Quill font classes ── */
+.post-content .ql-font-serif      { font-family: Georgia, 'Times New Roman', Times, serif; }
+.post-content .ql-font-monospace  { font-family: 'SF Mono', Monaco, Consolas, 'Courier New', monospace; }
+
+/* ── Headings (Quill h1–h4) ── */
+.post-content h1 { font-size: 2rem; }
+.post-content h2 { font-size: 1.75rem; }
+.post-content h3 { font-size: 1.5rem; }
+.post-content h4 { font-size: 1.25rem; }
+.post-content h5 { font-size: 1.125rem; }
+.post-content h6 { font-size: 1rem; color: var(--text-secondary); }
+
+/* ── Inline formats ── */
+.post-content s,
+.post-content del { text-decoration: line-through; color: var(--text-secondary); }
+.post-content u   { text-decoration: underline; }
+.post-content sub { vertical-align: sub; font-size: 0.75em; }
+.post-content sup { vertical-align: super; font-size: 0.75em; }
+.post-content mark { background: rgba(255, 214, 0, 0.35); border-radius: 3px; padding: 0 2px; }
+
+/* ── Text align ── */
+.post-content .ql-align-center,
+.post-content [style*="text-align: center"]   { text-align: center; }
+.post-content .ql-align-right,
+.post-content [style*="text-align: right"]    { text-align: right; }
+.post-content .ql-align-justify,
+.post-content [style*="text-align: justify"]  { text-align: justify; }
+
+/* ── RTL direction ── */
+.post-content .ql-direction-rtl { direction: rtl; text-align: right; }
+
+/* ── Indent levels (Quill 1–8) ── */
+.post-content .ql-indent-1 { padding-left: 3em; }
+.post-content .ql-indent-2 { padding-left: 6em; }
+.post-content .ql-indent-3 { padding-left: 9em; }
+.post-content .ql-indent-4 { padding-left: 12em; }
+.post-content .ql-indent-5 { padding-left: 15em; }
+.post-content .ql-indent-6 { padding-left: 18em; }
+.post-content .ql-indent-7 { padding-left: 21em; }
+.post-content .ql-indent-8 { padding-left: 24em; }
+
+/* ── Checklist ── */
+.post-content ul.ql-checklist,
+.post-content .ql-checklist { list-style: none; padding-left: 0.5rem; }
+.post-content .ql-checklist li { display: flex; align-items: flex-start; gap: 8px; padding: 4px 0; }
+.post-content .ql-checklist li.checked,
+.post-content .ql-checklist li[data-list="checked"] { color: var(--text-secondary); text-decoration: line-through; }
+.post-content .ql-checklist-cb { flex-shrink: 0; margin-top: 4px; accent-color: var(--liquid-primary); width: 16px; height: 16px; }
+
+/* ── Blockquote ── */
+.post-content blockquote {
+  margin: 1.5rem 0;
+  padding: 1rem 1.5rem;
   background: rgba(0, 122, 255, 0.05);
-  font-weight: 700;
+  border-left: 4px solid var(--liquid-primary);
+  border-radius: 0 12px 12px 0;
+  font-style: italic;
+  color: var(--text-tertiary);
+  position: relative;
+}
+.post-content blockquote::before {
+  content: '"';
+  position: absolute;
+  top: -10px; left: 12px;
+  font-size: 3rem;
+  line-height: 1;
   color: var(--liquid-primary);
+  opacity: 0.25;
+  font-family: Georgia, serif;
 }
 
-/* Hashtags */
+/* ── Code block (Quill 2: div.ql-code-block / Quill 1: pre.ql-syntax) ── */
+.post-content .ql-code-block-container {
+  position: relative;
+  background: #1e1e2e;
+  border-radius: 12px;
+  overflow: hidden;
+  margin: 1.5rem 0;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.25), inset 0 1px 0 rgba(255,255,255,0.05);
+}
+.post-content .ql-code-block-container::before {
+  content: 'code';
+  position: absolute;
+  top: 10px; right: 16px;
+  font-size: 0.68rem;
+  font-family: monospace;
+  color: rgba(205, 214, 244, 0.35);
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* Quill 2: each line is a div.ql-code-block */
+.post-content div.ql-code-block {
+  display: block;
+  color: #cdd6f4;
+  font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace;
+  font-size: 0.9rem;
+  line-height: 1.65;
+  white-space: pre;
+  tab-size: 2;
+  padding: 0 2rem;
+}
+.post-content div.ql-code-block:first-child { padding-top: 1.5rem; }
+.post-content div.ql-code-block:last-child  { padding-bottom: 1.5rem; }
+
+/* Quill 1: pre.ql-syntax */
+.post-content pre.ql-syntax,
+.post-content .ql-code-block-container pre,
+.post-content pre {
+  background: #1e1e2e;
+  color: #cdd6f4;
+  padding: 1.5rem 2rem;
+  border-radius: 12px;
+  overflow-x: auto;
+  margin: 1.5rem 0;
+  font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace;
+  font-size: 0.9rem;
+  line-height: 1.65;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.25);
+  tab-size: 2;
+  white-space: pre;
+}
+.post-content code {
+  background: rgba(142, 142, 147, 0.12);
+  padding: 2px 7px;
+  border-radius: 5px;
+  font-family: 'SF Mono', Monaco, Consolas, 'Courier New', monospace;
+  font-size: 0.875em;
+  color: var(--liquid-accent);
+  border: 1px solid rgba(142,142,147,0.15);
+}
+.post-content pre code { background: none; padding: 0; color: inherit; border: none; }
+
+/* ── Formula (Quill MathJax/KaTeX) ── */
+.post-content .ql-formula { display: inline-block; padding: 2px 6px; }
+
+/* ── Video (Quill embeds) ── */
+.post-content video {
+  max-width: 100%;
+  height: auto;
+  display: block;
+  margin: 1.5rem auto;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+/* Dark mode overrides for Quill content */
+@media (prefers-color-scheme: dark) {
+  .post-content blockquote {
+    background: rgba(0, 122, 255, 0.08);
+    color: #98989d;
+  }
+  .post-content code {
+    background: rgba(255,255,255,0.08);
+    color: #a8d8ff;
+    border-color: rgba(255,255,255,0.1);
+  }
+  .post-content table { background: rgba(36, 36, 38, 0.9); }
+  .post-content th { background: rgba(0, 122, 255, 0.12); color: #6eb5ff; }
+  .post-content td { border-color: rgba(255,255,255,0.07); color: #e5e5ea; }
+  .post-content mark { background: rgba(255, 214, 0, 0.2); }
+}
+
+/* ============================================
+   HASHTAGS
+   ============================================ */
 .relife-hashtags {
   display: flex;
   flex-wrap: wrap;
@@ -557,29 +821,101 @@ body {
   transition: background 0.2s ease, transform 0.2s ease;
   border: 1px solid transparent;
 }
-
 .relife-hashtag:hover {
   background: rgba(0, 122, 255, 0.15);
   border-color: rgba(0, 122, 255, 0.3);
   transform: translateY(-1px);
 }
 
-/* Reaction Buttons */
+/* ============================================
+   REACTION BUTTONS — [#3] Like/Dislike cùng hàng, Comment full width
+   ============================================ */
 .relife-reactions {
   display: flex;
-  gap: 12px;
-  flex-wrap: wrap;
+  flex-direction: column;
+  gap: 10px;
   margin-bottom: var(--spacing-xl);
   padding-top: var(--spacing-lg);
   border-top: 1px solid rgba(142, 142, 147, 0.15);
 }
 
+/* [#3] Dòng trên: Like + Dislike mỗi cái chiếm một nửa */
+.relife-reactions-row {
+  display: flex;
+  gap: 10px;
+}
+
+/* [#3] Nút like / dislike */
+#likeBtn,
+#dislikeBtn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 16px;
+  background: rgba(142, 142, 147, 0.1);
+  border: 2px solid transparent;
+  border-radius: 999px;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+#likeBtn:hover,
+#dislikeBtn:hover {
+  background: white;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+#likeBtn.active-like {
+  background: rgba(0, 122, 255, 0.15);
+  border-color: var(--liquid-primary);
+  color: var(--liquid-primary);
+}
+
+#dislikeBtn.active-dislike {
+  background: rgba(255, 45, 85, 0.15);
+  border-color: var(--liquid-accent);
+  color: var(--liquid-accent);
+}
+
+/* [#3] Nút comment — full width, dòng riêng */
+#commentToggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 16px;
+  width: 100%;
+  background: rgba(142, 142, 147, 0.1);
+  border: 2px solid transparent;
+  border-radius: 999px;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
+  color: var(--text-secondary);
+}
+
+#commentToggle:hover {
+  background: white;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+/* Giữ lại class chung cho trường hợp JS dùng .relife-reaction-btn */
 .relife-reaction-btn {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 8px;
-  padding: 10px 20px;
-  background: rgba(200, 255, 200, 0.8);
+  padding: 10px 16px;
+  background: rgba(142, 142, 147, 0.1);
   border: 2px solid transparent;
   border-radius: 999px;
   font-size: 0.9375rem;
@@ -607,11 +943,12 @@ body {
   color: var(--liquid-accent);
 }
 
-.relife-reaction-btn i {
-  font-size: 1.125rem;
-}
+.relife-reaction-btn i { font-size: 1.125rem; }
 
-.relife-reaction-btn:disabled {
+.relife-reaction-btn:disabled,
+#likeBtn:disabled,
+#dislikeBtn:disabled,
+#commentToggle:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
@@ -627,68 +964,60 @@ body {
   display: flex;
   align-items: center;
   gap: 10px;
-  font-size: 1.375rem;
+  font-size: 1.25rem;
   font-weight: 700;
   color: var(--text-primary);
   margin-bottom: var(--spacing-lg);
 }
 
-.relife-section-title i {
-  color: var(--liquid-primary);
-  font-size: 1.5rem;
-}
-
 .relife-badge {
-  padding: 4px 12px;
-  background: rgba(0, 122, 255, 0.1);
-  color: var(--liquid-primary);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  height: 24px;
+  padding: 0 8px;
+  background: var(--liquid-primary);
+  color: white;
   border-radius: 999px;
-  font-size: 0.875rem;
+  font-size: 0.75rem;
   font-weight: 700;
 }
 
+/* Login notice */
 .relife-notice {
   display: flex;
   align-items: center;
   gap: 12px;
   padding: 16px 20px;
-  background: rgba(0, 122, 255, 0.08);
+  background: rgba(0, 122, 255, 0.06);
+  border: 1px solid rgba(0, 122, 255, 0.15);
   border-radius: 16px;
   margin-bottom: var(--spacing-lg);
-  border-left: 4px solid var(--liquid-primary);
+  color: var(--text-secondary);
+  font-size: 0.9375rem;
 }
 
-.relife-notice i {
-  font-size: 1.25rem;
-  color: var(--liquid-primary);
-}
-
-.relife-notice span {
-  flex: 1;
-  color: var(--text-primary);
-  font-weight: 500;
-}
+.relife-notice i { color: var(--liquid-primary); font-size: 1.125rem; }
 
 .relife-btn-sm {
-  padding: 8px 16px;
+  padding: 6px 16px;
   background: var(--liquid-primary);
   color: white;
   border: none;
-  border-radius: 10px;
-  font-weight: 600;
-  font-size: 0.875rem;
+  border-radius: 999px;
+  font-weight: 700;
+  font-size: 0.8125rem;
   cursor: pointer;
-  transition: background 0.2s ease, transform 0.2s ease;
+  transition: background 0.2s ease;
+  margin-left: auto;
+  white-space: nowrap;
 }
+.relife-btn-sm:hover { background: var(--liquid-secondary); }
 
-.relife-btn-sm:hover {
-  background: var(--liquid-secondary);
-  transform: translateY(-1px);
-}
-
-/* Comment Form */
+/* Comment form */
 .relife-comment-form {
-  margin-bottom: var(--spacing-xl);
+  margin-bottom: var(--spacing-lg);
 }
 
 .relife-comment-input-wrapper {
@@ -696,6 +1025,59 @@ body {
   flex-direction: column;
   gap: 12px;
 }
+
+/* Input box: textarea + send button overlaid inside */
+.relife-comment-input-box {
+  position: relative;
+}
+
+.relife-comment-input {
+  width: 100%;
+  padding: 14px 56px 14px 18px; /* right padding reserves space for button */
+  background: rgba(142, 142, 147, 0.08);
+  border: 2px solid var(--glass-border);
+  border-radius: 16px;
+  font-size: 0.9375rem;
+  font-family: inherit;
+  color: var(--text-primary);
+  resize: none;
+  min-height: 96px;
+  transition: border-color 0.2s ease, background 0.2s ease;
+  box-sizing: border-box;
+}
+.relife-comment-input::placeholder { color: var(--text-secondary); }
+.relife-comment-input:focus {
+  outline: none;
+  background: white;
+  border-color: var(--liquid-primary);
+  box-shadow: 0 2px 8px rgba(0, 122, 255, 0.15);
+}
+
+/* Send button — inside bottom-right of textarea */
+.relife-send-btn {
+  position: absolute;
+  bottom: 10px;
+  right: 10px;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, var(--liquid-primary), var(--liquid-secondary));
+  color: white;
+  border: none;
+  border-radius: 50%;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: transform 0.2s ease, box-shadow 0.2s ease, opacity 0.2s ease;
+  box-shadow: 0 2px 8px rgba(0, 122, 255, 0.35);
+}
+.relife-send-btn:hover {
+  transform: scale(1.1);
+  box-shadow: 0 4px 12px rgba(0, 122, 255, 0.5);
+}
+.relife-send-btn:active { transform: scale(0.95); }
+.relife-send-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
 
 .relife-reply-indicator {
   display: flex;
@@ -705,31 +1087,16 @@ body {
   background: rgba(0, 122, 255, 0.08);
   border-radius: 12px;
   border-left: 4px solid var(--liquid-primary);
-  animation: slideDown 0.2s ease;
+  animation: slideDown 0.3s ease;
 }
 
 @keyframes slideDown {
-  from {
-    opacity: 0;
-    transform: translateY(-10px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+  from { opacity: 0; transform: translateY(-8px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
 
-.relife-reply-indicator i {
-  color: var(--liquid-primary);
-  font-size: 1rem;
-}
-
-.relife-reply-indicator span {
-  flex: 1;
-  color: var(--text-primary);
-  font-weight: 600;
-  font-size: 0.875rem;
-}
+.relife-reply-indicator i { color: var(--liquid-primary); font-size: 1rem; }
+.relife-reply-indicator span { flex: 1; font-weight: 600; font-size: 0.875rem; color: var(--text-primary); }
 
 .relife-btn-cancel-reply {
   display: flex;
@@ -744,68 +1111,9 @@ body {
   cursor: pointer;
   transition: background 0.2s ease, transform 0.2s ease;
 }
+.relife-btn-cancel-reply:hover { background: rgba(255, 59, 48, 0.2); transform: scale(1.1); }
 
-.relife-btn-cancel-reply:hover {
-  background: rgba(255, 59, 48, 0.2);
-  transform: scale(1.1);
-}
-
-.relife-comment-input {
-  width: 100%;
-  padding: 16px 20px;
-  background: rgba(200, 255, 255, 0.8);
-  border: 2px solid black;
-  border-radius: 16px;
-  font-size: 1rem;
-  font-family: inherit;
-  color: var(--text-primary);
-  resize: vertical;
-  min-height: 100px;
-  transition: background 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
-}
-
-.relife-comment-input::placeholder {
-  color: var(--text-secondary);
-}
-
-.relife-comment-input:focus {
-  outline: none;
-  background: white;
-  border-color: var(--liquid-primary);
-  box-shadow: 0 2px 8px rgba(0, 122, 255, 0.15);
-}
-
-.relife-btn-primary {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 12px 24px;
-  background: linear-gradient(135deg, var(--liquid-primary), var(--liquid-secondary));
-  color: white;
-  border: none;
-  border-radius: 12px;
-  font-weight: 700;
-  font-size: 1rem;
-  cursor: pointer;
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
-  box-shadow: 0 2px 8px rgba(0, 122, 255, 0.3);
-  align-self: flex-end;
-}
-
-.relife-btn-primary:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0, 122, 255, 0.4);
-}
-
-.relife-btn-primary:active {
-  transform: translateY(0);
-}
-
-.relife-btn-primary i {
-  font-size: 1.125rem;
-}
-
-/* Comments List */
+/* Comments list */
 .relife-comments-list {
   display: flex;
   flex-direction: column;
@@ -821,41 +1129,18 @@ body {
   animation: fadeInUp 0.3s ease;
   position: relative;
 }
+.relife-comment:hover { background: rgba(255, 255, 255, 0.95); }
 
-.relife-comment:hover {
-  background: rgba(255, 255, 255, 0.95);
-}
-
-.relife-comment.reply {
+.relife-comment.reply,
+.relife-comment.reply-level-1 {
   margin-left: 40px;
   background: rgba(0, 122, 255, 0.05);
   border-left: 3px solid var(--liquid-primary);
 }
-
-.relife-comment.reply-level-2,
-.relife-comment.reply-level-3,
+.relife-comment.reply-level-2 { margin-left: 40px; border-left: 3px solid var(--liquid-secondary); }
+.relife-comment.reply-level-3 { margin-left: 40px; border-left: 3px solid var(--liquid-accent); }
 .relife-comment.reply-level-4,
-.relife-comment.reply-level-5 {
-  margin-left: 40px;
-  border-left-width: 3px;
-}
-
-.relife-comment.reply-level-1 {
-  border-left-color: var(--liquid-primary);
-}
-
-.relife-comment.reply-level-2 {
-  border-left-color: var(--liquid-secondary);
-}
-
-.relife-comment.reply-level-3 {
-  border-left-color: var(--liquid-accent);
-}
-
-.relife-comment.reply-level-4,
-.relife-comment.reply-level-5 {
-  border-left-color: var(--liquid-warning);
-}
+.relife-comment.reply-level-5 { margin-left: 40px; border-left: 3px solid var(--liquid-warning); }
 
 .relife-comment.highlight {
   background: rgba(255, 149, 0, 0.15);
@@ -879,29 +1164,21 @@ body {
   cursor: pointer;
   transition: transform 0.2s ease;
 }
+.relife-comment-avatar:hover { transform: scale(1.05); }
 
-.relife-comment-avatar:hover {
-  transform: scale(1.05);
-}
-
-.relife-comment-author {
-  flex: 1;
-}
+.relife-comment-author { flex: 1; min-width: 0; }
 
 .relife-comment-name {
   font-weight: 700;
   color: var(--text-primary);
   font-size: 0.9375rem;
   cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
   transition: color 0.2s ease;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
-
-.relife-comment-name:hover {
-  color: var(--liquid-primary);
-}
+.relife-comment-name:hover { color: var(--liquid-primary); }
 
 .relife-comment-time {
   display: flex;
@@ -909,31 +1186,53 @@ body {
   gap: 4px;
   color: var(--text-secondary);
   font-size: 0.8125rem;
+  margin-top: 2px;
+}
+
+.relife-author-comment-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  background: linear-gradient(135deg, var(--liquid-primary), var(--liquid-secondary));
+  color: white;
+  border-radius: 999px;
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-left: 6px;
 }
 
 .relife-comment-text {
-  color: var(--text-primary);
-  line-height: 1.6;
   white-space: pre-wrap;
   word-break: break-word;
-  overflow-wrap: break-word;
+  overflow-wrap: anywhere;
+  color: var(--text-primary);
+  line-height: 1.6;
   margin-bottom: 12px;
+  font-size: 0.9375rem;
 }
 
-.relife-mention {
+.relife-reply-to-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  background: rgba(0, 122, 255, 0.08);
+  border-radius: 999px;
+  font-size: 0.75rem;
   color: var(--liquid-primary);
   font-weight: 600;
+  margin-bottom: 10px;
   cursor: pointer;
-  transition: background 0.2s ease;
-  text-decoration: none;
-  background: rgba(0, 122, 255, 0.08);
-  padding: 2px 6px;
-  border-radius: 4px;
+  transition: background 0.2s ease, transform 0.2s ease;
+  border: 1px solid transparent;
 }
-
-.relife-mention:hover {
+.relife-reply-to-badge:hover {
   background: rgba(0, 122, 255, 0.15);
-  text-decoration: underline;
+  border-color: rgba(0, 122, 255, 0.3);
+  transform: translateY(-2px);
 }
 
 .relife-edited-badge {
@@ -946,20 +1245,11 @@ body {
   margin-left: 8px;
 }
 
-.relife-edited-badge i {
-  font-size: 0.7rem;
-}
-
-.relife-comment.reported {
-  background: rgba(255, 59, 48, 0.08);
-  border-left-color: var(--liquid-danger);
-}
-
-.relife-report-badge {
+.relife-report-badge-inline {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  padding: 4px 10px;
+  padding: 3px 10px;
   background: rgba(255, 59, 48, 0.12);
   color: var(--liquid-danger);
   border-radius: 999px;
@@ -968,31 +1258,125 @@ body {
   margin-left: 8px;
 }
 
-.relife-report-badge i {
-  font-size: 0.7rem;
+.relife-comment.reported {
+  background: rgba(255, 59, 48, 0.06);
+  border-left: 3px solid var(--liquid-danger);
 }
 
-.relife-report-modal {
-  position: fixed;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  background: var(--glass-bg);
-  border: 1px solid var(--glass-border);
-  border-radius: 20px;
-  padding: var(--spacing-xl);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
-  max-width: 400px;
-  width: 90%;
-  z-index: 10000;
-  display: none;
+.relife-comment-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 10px;
 }
 
-.relife-report-modal.show {
-  display: block;
-  animation: fadeInUp 0.2s ease;
+.relife-comment-action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 12px;
+  background: transparent;
+  border: none;
+  border-radius: 8px;
+  color: var(--text-secondary);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s ease, color 0.2s ease;
+}
+.relife-comment-action-btn:hover {
+  background: rgba(0, 122, 255, 0.1);
+  color: var(--liquid-primary);
+}
+.relife-comment-action-btn.delete:hover {
+  background: rgba(255, 59, 48, 0.1);
+  color: var(--liquid-danger);
 }
 
+.relife-toggle-replies {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  background: rgba(0, 122, 255, 0.08);
+  border: none;
+  border-radius: 999px;
+  color: var(--liquid-primary);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s ease, transform 0.2s ease;
+  margin-top: 8px;
+}
+.relife-toggle-replies:hover { background: rgba(0, 122, 255, 0.15); transform: translateX(4px); }
+.relife-toggle-replies.expanded { background: rgba(255, 149, 0, 0.1); color: var(--liquid-warning); }
+.relife-toggle-replies i { transition: transform 0.2s ease; }
+.relife-toggle-replies.expanded i { transform: rotate(180deg); }
+
+.relife-replies-container { margin-top: 8px; }
+
+/* Edit form */
+.relife-edit-form { margin-top: 12px; animation: slideDown 0.3s ease; }
+
+.relife-edit-textarea {
+  width: 100%;
+  padding: 12px 16px;
+  background: white;
+  border: 2px solid var(--liquid-primary);
+  border-radius: 12px;
+  font-size: 0.9375rem;
+  font-family: inherit;
+  color: var(--text-primary);
+  resize: vertical;
+  min-height: 80px;
+}
+.relife-edit-textarea:focus { outline: none; box-shadow: 0 4px 16px rgba(0, 122, 255, 0.2); }
+
+.relife-edit-buttons { display: flex; gap: 8px; margin-top: 8px; }
+
+.relife-btn-save {
+  padding: 8px 16px;
+  background: var(--liquid-success);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-weight: 700;
+  font-size: 0.875rem;
+  cursor: pointer;
+  transition: background 0.2s ease, transform 0.2s ease;
+}
+.relife-btn-save:hover { background: #28a745; transform: translateY(-2px); }
+
+.relife-btn-cancel {
+  padding: 8px 16px;
+  background: rgba(142, 142, 147, 0.15);
+  color: var(--text-primary);
+  border: none;
+  border-radius: 8px;
+  font-weight: 700;
+  font-size: 0.875rem;
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+.relife-btn-cancel:hover { background: rgba(142, 142, 147, 0.25); }
+
+/* Mention */
+.mention {
+  color: var(--liquid-primary);
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: none;
+  background: rgba(0, 122, 255, 0.08);
+  padding: 2px 6px;
+  border-radius: 4px;
+  transition: background 0.2s ease;
+}
+.mention:hover { background: rgba(0, 122, 255, 0.15); text-decoration: underline; }
+
+/* ============================================
+   REPORT MODAL
+   ============================================ */
 .relife-report-modal-overlay {
   position: fixed;
   inset: 0;
@@ -1000,49 +1384,40 @@ body {
   z-index: 9999;
   display: none;
 }
+.relife-report-modal-overlay.show { display: block; animation: fadeIn 0.2s ease; }
 
-.relife-report-modal-overlay.show {
-  display: block;
+.relife-report-modal {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: white;
+  border-radius: 20px;
+  padding: 24px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  max-width: 400px;
+  width: calc(100% - 32px);
+  z-index: 10000;
+  display: none;
 }
+.relife-report-modal.show { display: block; animation: fadeInUp 0.3s ease; }
+.relife-report-modal h3 { font-size: 1.25rem; font-weight: 700; margin-bottom: 16px; color: var(--text-primary); }
 
-.relife-report-modal h3 {
-  font-size: 1.25rem;
-  font-weight: 700;
-  margin-bottom: var(--spacing-md);
-  color: var(--text-primary);
-}
-
-.relife-report-reason {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin-bottom: var(--spacing-md);
-}
-
+.relife-report-reason { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; }
 .relife-report-reason label {
   display: flex;
   align-items: center;
   gap: 8px;
   padding: 12px;
-  background: rgba(255, 255, 255, 0.5);
+  background: rgba(142, 142, 147, 0.08);
   border-radius: 10px;
   cursor: pointer;
   transition: background 0.2s ease;
 }
+.relife-report-reason label:hover { background: rgba(142, 142, 147, 0.15); }
+.relife-report-reason input[type="radio"] { accent-color: var(--liquid-danger); }
 
-.relife-report-reason label:hover {
-  background: rgba(255, 255, 255, 0.8);
-}
-
-.relife-report-reason input[type="radio"] {
-  accent-color: var(--liquid-danger);
-}
-
-.relife-report-buttons {
-  display: flex;
-  gap: 10px;
-  margin-top: var(--spacing-lg);
-}
+.relife-report-buttons { display: flex; gap: 10px; margin-top: 16px; }
 
 .relife-btn-danger {
   flex: 1;
@@ -1055,90 +1430,24 @@ body {
   cursor: pointer;
   transition: background 0.2s ease, transform 0.2s ease;
 }
+.relife-btn-danger:hover { background: #dc2f2f; transform: translateY(-2px); }
 
-.relife-btn-danger:hover {
-  background: #ff1f1a;
-  transform: translateY(-1px);
-}
-
-.relife-btn-cancel {
-  flex: 1;
-  padding: 12px 24px;
-  background: rgba(142, 142, 147, 0.2);
-  color: var(--text-primary);
-  border: none;
-  border-radius: 12px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background 0.2s ease;
-}
-
-.relife-btn-cancel:hover {
-  background: rgba(142, 142, 147, 0.3);
-}
-
-.relife-edit-comment-form {
-  margin-top: 12px;
-  animation: slideDown 0.2s ease;
-}
-
-.relife-edit-textarea {
-  width: 100%;
-  padding: 12px 16px;
-  background: rgba(255, 255, 255, 0.8);
-  border: 2px solid var(--liquid-primary);
-  border-radius: 12px;
-  font-size: 0.9375rem;
-  font-family: inherit;
-  color: var(--text-primary);
-  resize: vertical;
-  min-height: 80px;
-}
-
-.relife-edit-textarea:focus {
-  outline: none;
-  background: white;
-  box-shadow: 0 2px 8px rgba(0, 122, 255, 0.2);
-}
-
-.relife-edit-buttons {
-  display: flex;
-  gap: 8px;
-  margin-top: 8px;
-}
-
-.relife-btn-save {
-  padding: 8px 16px;
-  background: var(--liquid-success);
-  color: white;
-  border: none;
-  border-radius: 8px;
-  font-weight: 600;
-  font-size: 0.875rem;
-  cursor: pointer;
-  transition: background 0.2s ease, transform 0.2s ease;
-}
-
-.relife-btn-save:hover {
-  background: #2eb84e;
-  transform: translateY(-1px);
-}
-
+/* ============================================
+   MENTION DROPDOWN
+   ============================================ */
 .relife-mention-dropdown {
-  position: absolute;
-  background: var(--glass-bg);
+  position: fixed;
+  background: white;
   border: 1px solid var(--glass-border);
-  border-radius: 12px;
-  box-shadow: var(--glass-shadow);
-  max-height: 200px;
+  border-radius: 14px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
+  max-height: 220px;
   overflow-y: auto;
-  z-index: 1000;
+  z-index: 5000;
   display: none;
+  min-width: 220px;
 }
-
-.relife-mention-dropdown.show {
-  display: block;
-}
+.relife-mention-dropdown.show { display: block; animation: fadeInUp 0.2s ease; }
 
 .relife-mention-item {
   display: flex;
@@ -1146,130 +1455,13 @@ body {
   gap: 10px;
   padding: 10px 14px;
   cursor: pointer;
-  transition: background 0.2s ease;
+  transition: background 0.15s ease;
 }
+.relife-mention-item:hover { background: rgba(0, 122, 255, 0.06); }
 
-.relife-mention-item:hover {
-  background: rgba(0, 122, 255, 0.1);
-}
-
-.relife-mention-avatar {
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  object-fit: cover;
-}
-
-.relife-mention-name {
-  flex: 1;
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
-.relife-mention-tag {
-  color: var(--liquid-primary);
-  font-size: 0.875rem;
-}
-
-.relife-comment-actions {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-top: 8px;
-}
-
-.relife-comment-action-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 12px;
-  background: transparent;
-  border: none;
-  border-radius: 8px;
-  color: var(--text-secondary);
-  font-size: 0.8125rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background 0.2s ease, color 0.2s ease;
-}
-
-.relife-comment-action-btn:hover {
-  background: rgba(0, 122, 255, 0.1);
-  color: var(--liquid-primary);
-}
-
-.relife-comment-action-btn.delete:hover {
-  background: rgba(255, 59, 48, 0.1);
-  color: var(--liquid-danger);
-}
-
-.relife-comment-action-btn i {
-  font-size: 0.875rem;
-}
-
-.relife-toggle-replies {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 8px 14px;
-  background: rgba(0, 122, 255, 0.08);
-  border: none;
-  border-radius: 999px;
-  color: var(--liquid-primary);
-  font-size: 0.8125rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background 0.2s ease;
-  margin-top: 8px;
-}
-
-.relife-toggle-replies:hover {
-  background: rgba(0, 122, 255, 0.15);
-}
-
-.relife-toggle-replies.expanded {
-  background: rgba(255, 149, 0, 0.1);
-  color: var(--liquid-warning);
-}
-
-.relife-toggle-replies i {
-  font-size: 0.75rem;
-  transition: transform 0.2s ease;
-}
-
-.relife-toggle-replies.expanded i {
-  transform: rotate(180deg);
-}
-
-.relife-replies-container {
-  margin-top: 8px;
-  animation: slideDown 0.2s ease;
-}
-
-.relife-reply-to {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 4px 10px;
-  background: rgba(0, 122, 255, 0.08);
-  border-radius: 999px;
-  font-size: 0.75rem;
-  color: var(--liquid-primary);
-  font-weight: 600;
-  margin-bottom: 8px;
-  cursor: pointer;
-  transition: background 0.2s ease, border-color 0.2s ease;
-  border: 1px solid transparent;
-}
-
-.relife-reply-to:hover {
-  background: rgba(0, 122, 255, 0.15);
-  border-color: rgba(0, 122, 255, 0.3);
-}
-
-.relife-reply-to i {
-  font-size: 0.7rem;
-}
+.relife-mention-avatar { width: 32px; height: 32px; border-radius: 50%; object-fit: cover; }
+.relife-mention-name { flex: 1; font-weight: 600; color: var(--text-primary); font-size: 0.9rem; }
+.relife-mention-tag { color: var(--liquid-primary); font-size: 0.8125rem; }
 
 /* ============================================
    IMAGE VIEWER
@@ -1277,61 +1469,52 @@ body {
 .os-viewer-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.95);
+  background: rgba(0, 0, 0, 0.92);
+  z-index: 9990;
   display: none;
   align-items: center;
   justify-content: center;
-  z-index: 20000;
-  -webkit-tap-highlight-color: transparent;
-  touch-action: none;
+  cursor: grab;
 }
-
-.os-viewer-overlay.open {
-  display: flex;
-}
+.os-viewer-overlay.active,
+.os-viewer-overlay.open { display: flex; animation: fadeIn 0.2s ease; }
+.os-viewer-overlay.dragging { cursor: grabbing; }
 
 .os-viewer-inner {
   position: relative;
-  max-width: 95%;
-  max-height: 95%;
-  width: auto;
-  height: auto;
+  width: 100%;
+  height: 100%;
   display: flex;
   align-items: center;
   justify-content: center;
-  outline: none;
+  overflow: hidden;
 }
 
 .os-viewer-img {
-  max-width: 100%;
-  max-height: 100%;
+  max-width: 90vw;
+  max-height: 85vh;
+  object-fit: contain;
+  border-radius: 8px;
   user-select: none;
-  -webkit-user-drag: none;
-  cursor: grab;
-  display: block;
-  border-radius: 12px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.8);
   will-change: transform;
-  transform-origin: 0 0;
+  transform-origin: center center;
+  display: block;
 }
 
 .os-viewer-controls {
   position: absolute;
-  top: 20px;
-  right: 20px;
+  top: 20px; right: 20px;
   display: flex;
   gap: 8px;
   align-items: center;
   pointer-events: auto;
 }
-
 .os-viewer-controls button,
 .os-viewer-controls a {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 44px;
-  height: 44px;
+  width: 44px; height: 44px;
   background: rgba(255, 255, 255, 0.1);
   color: white;
   border: 1px solid rgba(255, 255, 255, 0.2);
@@ -1340,17 +1523,12 @@ body {
   transition: background 0.2s ease, transform 0.2s ease;
   font-size: 1.125rem;
 }
-
 .os-viewer-controls button:hover,
-.os-viewer-controls a:hover {
-  background: rgba(255, 255, 255, 0.2);
-  transform: scale(1.05);
-}
+.os-viewer-controls a:hover { background: rgba(255, 255, 255, 0.2); transform: scale(1.05); }
 
 .os-viewer-zoom-indicator {
   position: absolute;
-  bottom: 20px;
-  left: 50%;
+  bottom: 20px; left: 50%;
   transform: translateX(-50%);
   color: white;
   font-weight: 700;
@@ -1364,8 +1542,7 @@ body {
 
 .os-viewer-hint {
   position: absolute;
-  bottom: 20px;
-  right: 20px;
+  bottom: 20px; right: 20px;
   color: rgba(255, 255, 255, 0.7);
   font-size: 0.875rem;
   pointer-events: none;
@@ -1389,27 +1566,21 @@ body {
 }
 
 .relife-spinner {
-  width: 48px;
-  height: 48px;
+  width: 48px; height: 48px;
   border: 4px solid rgba(0, 122, 255, 0.1);
   border-top-color: var(--liquid-primary);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
 }
 
-@keyframes spin {
-  to { transform: rotate(360deg); }
-}
+@keyframes spin { to { transform: rotate(360deg); } }
 
 /* ============================================
-   NOTIFICATION-SPECIFIC STYLES
+   NOTIFICATION STYLES
    ============================================ */
 .relife-notification-icon {
-  width: 56px;
-  height: 56px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  width: 56px; height: 56px;
+  display: flex; align-items: center; justify-content: center;
   background: linear-gradient(135deg, var(--liquid-primary), var(--liquid-secondary));
   border-radius: 50%;
   color: white;
@@ -1437,10 +1608,63 @@ body {
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
-
 .relife-notification-badge.priority-high {
   background: rgba(255, 59, 48, 0.15);
   color: var(--liquid-danger);
+}
+
+/* ============================================
+   [#5] FLOATING COMMENT BUTTON
+   ============================================ */
+.relife-float-comment-btn {
+  position: fixed;
+  bottom: 80px; /* Nằm trên version badge */
+  right: 20px;
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--liquid-primary), var(--liquid-secondary));
+  color: white;
+  border: none;
+  box-shadow: 0 4px 16px rgba(0, 122, 255, 0.4);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 998; /* Dưới header sticky (1000) */
+  transition: opacity 0.25s ease, transform 0.25s ease, box-shadow 0.2s ease;
+  font-size: 1.25rem;
+}
+
+.relife-float-comment-btn:hover {
+  box-shadow: 0 6px 20px rgba(0, 122, 255, 0.55);
+  transform: translateY(-3px) scale(1.05);
+}
+
+/* [#5] Ẩn — JS thêm class này khi scroll xuống (đồng bộ với header) */
+.relife-float-comment-btn.btn-hidden {
+  opacity: 0;
+  transform: translateY(16px) scale(0.9);
+  pointer-events: none;
+}
+
+.relife-float-comment-count {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 5px;
+  background: var(--liquid-danger);
+  color: white;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid white;
+  line-height: 1;
 }
 
 /* ============================================
@@ -1448,8 +1672,7 @@ body {
    ============================================ */
 .relife-version-badge {
   position: fixed;
-  bottom: 20px;
-  right: 20px;
+  bottom: 20px; right: 20px;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -1480,169 +1703,275 @@ body {
 }
 
 /* ============================================
-   RESPONSIVE DESIGN
+   HIDDEN RENDERER
+   ============================================ */
+#__qs_hidden_renderer {
+  position: absolute;
+  left: -99999px;
+  top: 0;
+  width: calc(100vw - 40px);
+  max-width: 1200px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* ============================================
+   RESPONSIVE
    ============================================ */
 @media (max-width: 768px) {
   .container-main {
     padding: var(--spacing-md);
+    padding-top: calc(var(--spacing-md) + 68px);
   }
-  
-  .relife-header {
-    padding: var(--spacing-sm) var(--spacing-md);
-    border-radius: 16px;
+
+  .relife-header--sticky {
+    top: var(--spacing-sm);
+    width: calc(100% - var(--spacing-md) * 2);
   }
-  
-  .relife-page-title h4 {
-    font-size: 1.25rem;
-  }
-  
-  .relife-glass-card {
-    padding: var(--spacing-lg);
-    border-radius: 20px;
-  }
-  
-  .relife-post-title {
-    font-size: 1.5rem;
-  }
-  
-  .post-content {
-    font-size: 1rem;
-  }
-  
-  .relife-reactions {
-    justify-content: center;
-  }
-  
-  .relife-reaction-btn {
-    flex: 1;
-    min-width: 100px;
-    justify-content: center;
-  }
-  
-  .os-viewer-hint {
-    display: none;
-  }
-  
-  .os-viewer-controls {
-    top: 12px;
-    right: 12px;
-  }
-  
-  .relife-version-badge {
-    bottom: 12px;
-    right: 12px;
-    padding: 8px 12px;
-  }
-  
+
+  .relife-glass-card { padding: var(--spacing-lg); border-radius: 20px; }
+
+  .relife-post-title { font-size: 1.5rem; }
+
+  .post-content { font-size: 1rem; }
+
   .relife-comment.reply,
   .relife-comment.reply-level-1,
   .relife-comment.reply-level-2,
   .relife-comment.reply-level-3,
   .relife-comment.reply-level-4,
-  .relife-comment.reply-level-5 {
-    margin-left: 20px;
-  }
-  
-  .relife-toggle-replies {
-    width: 100%;
-    justify-content: center;
-  }
+  .relife-comment.reply-level-5 { margin-left: 20px; }
+
+  .relife-toggle-replies { width: 100%; justify-content: center; }
+
+  .os-viewer-hint { display: none; }
+  .os-viewer-controls { top: 12px; right: 12px; }
+
+  .relife-version-badge { bottom: 12px; right: 12px; padding: 8px 12px; }
+
+  .relife-float-comment-btn { bottom: 72px; right: 12px; }
 }
 
 @media (max-width: 576px) {
-  .relife-post-header {
-    flex-direction: column;
-    align-items: flex-start;
-  }
-  
-  .relife-author-avatar {
-    width: 48px;
-    height: 48px;
-  }
-  
-  .relife-author-name {
-    font-size: 1.125rem;
-  }
-  
-  .relife-post-title {
-    font-size: 1.375rem;
-  }
-  
-  .relife-reactions {
-    flex-direction: column;
-    gap: 8px;
-  }
-  
-  .relife-reaction-btn {
-    width: 100%;
-  }
-  
-  .relife-comment-input-wrapper {
-    gap: 8px;
-  }
-  
-  .relife-btn-primary {
-    width: 100%;
-    justify-content: center;
-  }
-  
-  .relife-comment.reply,
-  .relife-comment.reply-level-1,
-  .relife-comment.reply-level-2,
-  .relife-comment.reply-level-3,
-  .relife-comment.reply-level-4,
-  .relife-comment.reply-level-5 {
-    margin-left: 12px;
-  }
+  .relife-post-header { flex-wrap: wrap; }
+
+  .relife-author-avatar { width: 44px; height: 44px; }
+
+  .relife-post-title { font-size: 1.375rem; }
+
+  .relife-reactions-row { gap: 8px; }
 }
 
 /* ============================================
-   DARK MODE SUPPORT
+   DARK MODE
    ============================================ */
+/* Back button (notification posts) */
+.relife-back-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  background: rgba(142, 142, 147, 0.12);
+  border: 1px solid rgba(142, 142, 147, 0.25);
+  border-radius: 999px;
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+  font-weight: 600;
+  text-decoration: none;
+  transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+  white-space: nowrap;
+  margin-left: auto;
+}
+.relife-back-btn:hover {
+  background: rgba(0, 122, 255, 0.1);
+  border-color: rgba(0, 122, 255, 0.3);
+  color: var(--liquid-primary);
+}
+.relife-back-btn i {
+  font-size: 0.875rem;
+}
+
 @media (prefers-color-scheme: dark) {
   :root {
-    --glass-bg: rgba(28, 28, 30, 0.9);
-    --glass-border: rgba(255, 255, 255, 0.1);
+    --glass-bg: rgba(255, 255, 255, 0.04);
+    --glass-border: rgba(255, 255, 255, 0.08);
     --text-primary: #f5f5f7;
     --text-secondary: #98989d;
     --text-tertiary: #86868b;
+
+    /* Comment card tokens — dark */
+    --comment-bg: rgba(255, 255, 255, 0.04);
+    --comment-bg-hover: rgba(255, 255, 255, 0.07);
+    --comment-border: rgba(255, 255, 255, 0.07);
+    --comment-shadow: 0 1px 4px rgba(0,0,0,0.25), inset 0 1px 0 rgba(255,255,255,0.05);
+    --comment-reply-bg: rgba(0, 122, 255, 0.06);
   }
-  
-  body {
-    background: linear-gradient(135deg, #000000 0%, #1c1c1e 100%);
-  }
-  
-  .post-content,
+
+  body { background: linear-gradient(135deg, #000000 0%, #1c1c1e 100%); }
+
+  /* ── Comment cards — glass phân lớp, hoà vào nền tối ── */
   .relife-comment,
-  .relife-reaction-btn {
-    background: rgba(28, 28, 30, 0.8);
+  .comment-item {
+    background: rgba(255, 255, 255, 0.04);
+    border-color: rgba(255, 255, 255, 0.07);
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25), inset 0 1px 0 rgba(255,255,255,0.06);
+  }
+  .relife-comment:hover,
+  .comment-item:hover {
+    background: rgba(255, 255, 255, 0.07);
+    border-color: rgba(255, 255, 255, 0.11);
+  }
+
+  /* Reply level 1 — glow xanh nhạt */
+  .relife-comment.reply,
+  .relife-comment.reply-level-1,
+  .comment-item.reply,
+  .comment-item.reply-level-1 {
+    background: rgba(0, 122, 255, 0.06);
+    border-left-color: rgba(0, 122, 255, 0.5);
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(0,122,255,0.08);
+  }
+  /* Reply level 2 */
+  .relife-comment.reply-level-2,
+  .comment-item.reply-level-2 {
+    background: rgba(88, 86, 214, 0.06);
+    border-left-color: rgba(88, 86, 214, 0.45);
+  }
+  /* Reply level 3 */
+  .relife-comment.reply-level-3,
+  .comment-item.reply-level-3 {
+    background: rgba(255, 45, 85, 0.05);
+    border-left-color: rgba(255, 45, 85, 0.4);
+  }
+  /* Reply level 4–5 */
+  .relife-comment.reply-level-4,
+  .relife-comment.reply-level-5,
+  .comment-item.reply-level-4,
+  .comment-item.reply-level-5 {
+    background: rgba(255, 149, 0, 0.05);
+    border-left-color: rgba(255, 149, 0, 0.4);
+  }
+
+  /* Reported */
+  .relife-comment.reported,
+  .comment-item.reported {
+    background: rgba(255, 59, 48, 0.06);
+    border-left-color: rgba(255, 59, 48, 0.4);
+  }
+
+  /* Highlight */
+  .relife-comment.highlight,
+  .comment-item.highlight {
+    background: rgba(255, 149, 0, 0.07);
+    border-color: rgba(255, 149, 0, 0.3);
+    box-shadow: 0 0 0 2px rgba(255, 149, 0, 0.12), 0 1px 4px rgba(0,0,0,0.2);
+  }
+
+  /* Edit form */
+  .edit-textarea,
+  .relife-edit-textarea { background: rgba(44, 44, 46, 0.9); color: #f5f5f7; border-color: var(--liquid-primary); }
+  .edit-textarea:focus,
+  .relife-edit-textarea:focus { background: rgba(58, 58, 60, 1); }
+
+  /* Comment input — glass trong, viền tinh tế */
+  .relife-comment-input {
+    background: rgba(255, 255, 255, 0.04);
+    color: #f5f5f7;
     border-color: rgba(255, 255, 255, 0.1);
   }
-  
-  .post-content table {
-    background: rgba(28, 28, 30, 0.8);
-  }
-  
-  .post-content pre {
-    background: rgba(18, 18, 20, 0.95);
-  }
-  
-  .relife-comment-input {
-    background: rgba(28, 28, 30, 0.8);
-  }
-  
   .relife-comment-input:focus {
-    background: rgba(28, 28, 30, 0.95);
+    background: rgba(255, 255, 255, 0.07);
+    border-color: rgba(0, 122, 255, 0.5);
+    box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.12);
   }
+  .relife-comment-input-box .relife-comment-input { background: rgba(255, 255, 255, 0.04); }
+  .relife-comment-input-box .relife-comment-input:focus {
+    background: rgba(255, 255, 255, 0.07);
+    border-color: rgba(0, 122, 255, 0.5);
+  }
+
+  /* Glass card — dark glass, không quá đục */
+  .relife-glass-card {
+    background: rgba(255, 255, 255, 0.04);
+    border-color: rgba(255, 255, 255, 0.08);
+    box-shadow: 0 2px 16px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255,255,255,0.07);
+  }
+  .relife-comments-section .relife-glass-card {
+    background: rgba(255, 255, 255, 0.03);
+  }
+
+  /* Mention dropdown */
+  .relife-mention-dropdown,
+  .mention-dropdown { background: rgba(44, 44, 46, 0.98); border-color: rgba(255, 255, 255, 0.1); }
+  .relife-mention-item:hover,
+  .mention-item:hover { background: rgba(0, 122, 255, 0.15); }
+  .relife-mention-name,
+  .mention-name { color: #f5f5f7; }
+
+  /* Report modal */
+  .relife-report-modal { background: rgba(28, 28, 30, 0.98); }
+  .relife-report-reason label { background: rgba(44, 44, 46, 0.7); color: #f5f5f7; }
+  .relife-report-reason label:hover { background: rgba(58, 58, 60, 0.9); }
+
+  /* Title modal */
+  .relife-title-modal { background: #1c1c1e; }
+  .relife-title-modal-body { color: #f5f5f7; }
+
+  /* Other */
+  .post-content table { background: rgba(28, 28, 30, 0.8); }
+  .post-content pre { background: rgba(18, 18, 20, 0.95); }
+
+  /* Reply indicator & cancel */
+  .relife-reply-indicator,
+  .reply-indicator { background: rgba(0, 122, 255, 0.12); border-left-color: var(--liquid-primary); }
+
+  /* Reply-to badge */
+  .relife-reply-to,
+  .reply-to-badge { background: rgba(0, 122, 255, 0.12); }
+  .relife-reply-to:hover,
+  .reply-to-badge:hover { background: rgba(0, 122, 255, 0.2); }
+
+  /* Toggle replies */
+  .relife-toggle-replies,
+  .toggle-replies { background: rgba(0, 122, 255, 0.1); }
+  .relife-toggle-replies:hover,
+  .toggle-replies:hover { background: rgba(0, 122, 255, 0.18); }
+  .relife-toggle-replies.expanded,
+  .toggle-replies.expanded { background: rgba(255, 149, 0, 0.12); }
+
+  /* Comment action buttons */
+  .comment-action-btn,
+  .relife-comment-action-btn { color: #98989d; }
+  .comment-action-btn:hover,
+  .relife-comment-action-btn:hover { background: rgba(0, 122, 255, 0.15); color: var(--liquid-primary); }
+  .comment-action-btn.delete:hover,
+  .relife-comment-action-btn.delete:hover { background: rgba(255, 59, 48, 0.15); color: var(--liquid-danger); }
+
+  /* Author / edited / report badges */
+  .author-badge { background: linear-gradient(135deg, rgba(0,122,255,0.7), rgba(88,86,214,0.7)); }
+  .report-badge { background: rgba(255, 59, 48, 0.18); }
+
+  /* (send button area handled above) */
+
+  /* btn-save, btn-cancel (edit form) */
+  .btn-cancel,
+  .relife-btn-cancel { background: rgba(72, 72, 74, 0.8); color: #f5f5f7; }
+  .btn-cancel:hover,
+  .relife-btn-cancel:hover { background: rgba(88, 88, 90, 0.9); }
+
+  /* Notice box */
+  .relife-notice { background: rgba(0, 122, 255, 0.1); }
+
+  /* Report modal generic classes */
+  .report-modal { background: rgba(28, 28, 30, 0.98); }
+  .report-modal-overlay { background: rgba(0, 0, 0, 0.7); }
 }
 
 /* ============================================
    ACCESSIBILITY
    ============================================ */
 @media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
+  *, *::before, *::after {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
@@ -1657,33 +1986,7 @@ textarea:focus-visible {
 }
 
 /* ============================================
-   UTILITY CLASSES
-   ============================================ */
-.text-muted {
-  color: var(--text-secondary);
-}
-
-.text-center {
-  text-align: center;
-}
-
-.py-3 {
-  padding-top: 1rem;
-  padding-bottom: 1rem;
-}
-
-#__qs_hidden_renderer {
-  position: absolute;
-  left: -99999px;
-  top: 0;
-  width: calc(100vw - 40px);
-  max-width: 1200px;
-  opacity: 0;
-  pointer-events: none;
-}
-
-/* ============================================
-   PRINT STYLES
+   PRINT
    ============================================ */
 @media print {
   .relife-bg,
@@ -1691,18 +1994,358 @@ textarea:focus-visible {
   .relife-reactions,
   .relife-comments-section,
   .relife-version-badge,
-  .os-viewer-overlay {
-    display: none !important;
-  }
-  
-  .relife-glass-card {
-    background: white;
-    border: 1px solid #ddd;
-    box-shadow: none;
-  }
-  
-  .post-content {
-    font-size: 12pt;
-    line-height: 1.5;
-  }
+  .relife-float-comment-btn,
+  .os-viewer-overlay { display: none !important; }
+
+  .relife-glass-card { background: white; border: 1px solid #ddd; box-shadow: none; }
+  .post-content { font-size: 12pt; line-height: 1.5; }
+}
+
+/* Utility */
+.text-muted  { color: var(--text-secondary); }
+.text-center { text-align: center; }
+.text-danger { color: var(--liquid-danger); }
+.py-3        { padding-top: 1rem; padding-bottom: 1rem; }
+.py-5        { padding-top: 3rem; padding-bottom: 3rem; }
+.mt-3        { margin-top: 1rem; }
+.d-block     { display: block; }
+
+/* ============================================
+   COMMENT CLASS ALIASES (post-2.js compat)
+   JS renders comment-item / comment-header /
+   comment-avatar etc. — map to relife styles
+   ============================================ */
+
+.comment-item {
+  padding: 20px;
+  background: var(--comment-bg);
+  border: 1px solid var(--comment-border);
+  border-radius: 16px;
+  box-shadow: var(--comment-shadow);
+  transition: background 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+  animation: fadeInUp 0.3s ease;
+  position: relative;
+}
+.comment-item:hover {
+  background: var(--comment-bg-hover);
+  border-color: rgba(0, 122, 255, 0.2);
+}
+
+.comment-item.reply,
+.comment-item.reply-level-1 {
+  margin-left: 40px;
+  background: var(--comment-reply-bg);
+  border-left: 3px solid var(--liquid-primary);
+}
+.comment-item.reply-level-2 { margin-left: 40px; background: var(--comment-reply-bg); border-left: 3px solid var(--liquid-secondary); }
+.comment-item.reply-level-3 { margin-left: 40px; background: var(--comment-reply-bg); border-left: 3px solid var(--liquid-accent); }
+.comment-item.reply-level-4,
+.comment-item.reply-level-5 { margin-left: 40px; background: var(--comment-reply-bg); border-left: 3px solid var(--liquid-warning); }
+
+.comment-item.reported {
+  background: rgba(255, 59, 48, 0.06);
+  border-left: 3px solid var(--liquid-danger);
+}
+.comment-item.highlight {
+  background: rgba(255, 149, 0, 0.15);
+  border-color: var(--liquid-warning);
+  box-shadow: 0 0 0 3px rgba(255, 149, 0, 0.2);
+}
+
+.comment-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.comment-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid rgba(0, 122, 255, 0.2);
+  cursor: pointer;
+  transition: transform 0.2s ease;
+}
+.comment-avatar:hover { transform: scale(1.05); }
+
+.comment-author { flex: 1; min-width: 0; }
+
+.comment-name {
+  font-weight: 700;
+  color: var(--text-primary);
+  font-size: 0.9375rem;
+  cursor: pointer;
+  transition: color 0.2s ease;
+}
+.comment-name:hover { color: var(--liquid-primary); }
+
+.comment-time {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--text-secondary);
+  font-size: 0.8125rem;
+  margin-top: 2px;
+}
+
+.comment-text {
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  color: var(--text-primary);
+  line-height: 1.6;
+  margin-bottom: 12px;
+  font-size: 0.9375rem;
+}
+
+.comment-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+}
+
+.comment-action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 12px;
+  background: transparent;
+  border: none;
+  border-radius: 8px;
+  color: var(--text-secondary);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s ease, color 0.2s ease;
+}
+.comment-action-btn:hover {
+  background: rgba(0, 122, 255, 0.1);
+  color: var(--liquid-primary);
+}
+.comment-action-btn.delete:hover {
+  background: rgba(255, 59, 48, 0.1);
+  color: var(--liquid-danger);
+}
+
+.toggle-replies {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  background: rgba(0, 122, 255, 0.08);
+  border: none;
+  border-radius: 999px;
+  color: var(--liquid-primary);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s ease, transform 0.2s ease;
+  margin-top: 8px;
+}
+.toggle-replies:hover { background: rgba(0, 122, 255, 0.15); transform: translateX(4px); }
+.toggle-replies.expanded { background: rgba(255, 149, 0, 0.1); color: var(--liquid-warning); }
+.toggle-replies i { transition: transform 0.2s ease; }
+.toggle-replies.expanded i { transform: rotate(180deg); }
+
+.reply-to-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  background: rgba(0, 122, 255, 0.08);
+  border-radius: 999px;
+  font-size: 0.75rem;
+  color: var(--liquid-primary);
+  font-weight: 600;
+  margin-bottom: 10px;
+  cursor: pointer;
+  transition: background 0.2s ease, transform 0.2s ease;
+  border: 1px solid transparent;
+}
+.reply-to-badge:hover {
+  background: rgba(0, 122, 255, 0.15);
+  border-color: rgba(0, 122, 255, 0.3);
+  transform: translateY(-2px);
+}
+
+.edited-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+  font-style: italic;
+  margin-left: 8px;
+}
+
+.report-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px;
+  background: rgba(255, 59, 48, 0.12);
+  color: var(--liquid-danger);
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  margin-left: 8px;
+}
+
+.author-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  background: linear-gradient(135deg, var(--liquid-primary), var(--liquid-secondary));
+  color: white;
+  border-radius: 999px;
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-left: 6px;
+  vertical-align: middle;
+}
+
+/* Edit form */
+.edit-comment-form { margin-top: 12px; animation: slideDown 0.3s ease; }
+
+.edit-textarea {
+  width: 100%;
+  padding: 12px 16px;
+  background: white;
+  border: 2px solid var(--liquid-primary);
+  border-radius: 12px;
+  font-size: 0.9375rem;
+  font-family: inherit;
+  color: var(--text-primary);
+  resize: vertical;
+  min-height: 80px;
+}
+.edit-textarea:focus { outline: none; box-shadow: 0 4px 16px rgba(0, 122, 255, 0.2); }
+
+.edit-buttons { display: flex; gap: 8px; margin-top: 8px; }
+
+.btn-save {
+  padding: 8px 16px;
+  background: var(--liquid-success);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-weight: 700;
+  font-size: 0.875rem;
+  cursor: pointer;
+  transition: background 0.2s ease, transform 0.2s ease;
+}
+.btn-save:hover { background: #28a745; transform: translateY(-2px); }
+
+.btn-cancel {
+  padding: 8px 16px;
+  background: rgba(142, 142, 147, 0.15);
+  color: var(--text-primary);
+  border: none;
+  border-radius: 8px;
+  font-weight: 700;
+  font-size: 0.875rem;
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+.btn-cancel:hover { background: rgba(142, 142, 147, 0.25); }
+
+/* Mention dropdown */
+.mention-dropdown {
+  position: absolute;
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: 12px;
+  box-shadow: var(--glass-shadow);
+  max-height: 200px;
+  overflow-y: auto;
+  z-index: 1000;
+  display: none;
+}
+.mention-dropdown.show { display: block; }
+
+.mention-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+.mention-item:hover { background: rgba(0, 122, 255, 0.1); }
+
+.mention-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+.mention-name { flex: 1; font-weight: 600; color: var(--text-primary); }
+.mention-tag { color: var(--liquid-primary); font-size: 0.875rem; }
+
+/* Reply indicator */
+.reply-indicator {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  background: rgba(0, 122, 255, 0.08);
+  border-radius: 12px;
+  border-left: 4px solid var(--liquid-primary);
+  margin-bottom: 12px;
+  animation: slideDown 0.3s ease;
+}
+.reply-indicator i { color: var(--liquid-primary); font-size: 1rem; }
+.reply-indicator span { flex: 1; color: var(--text-primary); font-weight: 600; font-size: 0.875rem; }
+
+.btn-cancel-reply {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  background: rgba(255, 59, 48, 0.1);
+  border: none;
+  border-radius: 50%;
+  color: var(--liquid-danger);
+  cursor: pointer;
+  transition: background 0.2s ease, transform 0.2s ease;
+}
+.btn-cancel-reply:hover { background: rgba(255, 59, 48, 0.2); transform: scale(1.1); }
+
+/* Report modal (generic class names) */
+.report-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 9999;
+  display: none;
+}
+.report-modal-overlay.show { display: block; }
+
+.report-modal {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: white;
+  border-radius: 20px;
+  padding: 24px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  max-width: 400px;
+  width: 90%;
+  z-index: 10000;
+  display: none;
+}
+.report-modal.show { display: block; animation: fadeInUp 0.3s ease; }
+
+@keyframes slideDown {
+  from { opacity: 0; transform: translateY(-8px); }
+  to   { opacity: 1; transform: translateY(0); }
 }

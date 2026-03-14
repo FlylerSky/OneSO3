@@ -22,14 +22,25 @@
   </div>
 
   <div class="container container-main">
-    <!-- Header -->
-    <div class="relife-header">
-      <a href="index.html" class="relife-back-btn" id="nut_thoat">
+    <!--
+      HEADER
+      [#4] Thêm id="stickyHeader" + class "relife-header--sticky"
+           → CSS position:sticky + JS scroll ẩn/hiện.
+      [#2] .relife-subtitle đổi thành id="postTitleHeader"
+           → JS điền tiêu đề bài rút gọn vào đây.
+           → Khi tiêu đề quá dài, JS thêm class "is-truncated"
+             và gắn click để mở titleModal.
+    -->
+    <div class="relife-header relife-header--sticky" id="stickyHeader">
+      <a href="index.html" class="relife-back-btn" id="nut_thoat" title="Quay lại">
         <i class="bi bi-arrow-left"></i>
       </a>
       <div class="relife-page-title">
-        <h4 class="mb-0">Bài viết</h4>
-        <div class="relife-subtitle">Chi tiết nội dung</div>
+        <div
+          class="relife-subtitle relife-post-title-header"
+          id="postTitleHeader"
+          title=""
+        >Chi tiết nội dung</div>
       </div>
       <div class="relife-actions">
         <button class="relife-icon-btn" id="shareBtn" title="Chia sẻ">
@@ -74,15 +85,16 @@
                 <i class="bi bi-x-lg"></i>
               </button>
             </div>
-            <textarea 
-              id="commentText" 
-              class="relife-comment-input" 
-              rows="3" 
-              placeholder="Chia sẻ suy nghĩ của bạn..."></textarea>
-            <button id="sendComment" class="relife-btn-primary">
-              <i class="bi bi-send-fill"></i>
-              <span>Gửi bình luận</span>
-            </button>
+            <div class="relife-comment-input-box">
+              <textarea
+                id="commentText"
+                class="relife-comment-input"
+                rows="3"
+                placeholder="Chia sẻ suy nghĩ của bạn..."></textarea>
+              <button id="sendComment" class="relife-send-btn" title="Gửi bình luận">
+                <i class="bi bi-send-fill"></i>
+              </button>
+            </div>
           </div>
         </div>
 
@@ -155,6 +167,44 @@
 
   <!-- Mention Dropdown -->
   <div class="relife-mention-dropdown" id="mentionDropdown"></div>
+
+  <!--
+    [#2] Modal tiêu đề đầy đủ.
+    Hiện khi user click vào postTitleHeader có class "is-truncated".
+    titleModalContent được JS điền nội dung tiêu đề gốc vào.
+    Đóng bằng: click overlay, click nút X, hoặc phím Escape.
+  -->
+  <div class="relife-title-modal-overlay" id="titleModalOverlay"></div>
+  <div class="relife-title-modal" id="titleModal" role="dialog" aria-modal="true">
+    <div class="relife-title-modal-header">
+      <i class="bi bi-type-h1"></i>
+      <span>Tiêu đề bài viết</span>
+      <button class="relife-title-modal-close" id="titleModalClose" aria-label="Đóng">
+        <i class="bi bi-x-lg"></i>
+      </button>
+    </div>
+    <div class="relife-title-modal-body" id="titleModalContent"></div>
+  </div>
+
+  <!--
+    [#5] Nút comment nổi (floating action button).
+    - Ẩn/hiện đồng bộ với sticky header theo hướng scroll.
+    - Click → smooth scroll đến #commentsSection.
+    - floatCommentCount được JS đồng bộ với commentCount badge.
+    - style="display:none" → JS hiện sau khi bài load xong
+      và commentsSection được bật (chỉ với bài thường, không
+      phải notification).
+  -->
+  <button
+    class="relife-float-comment-btn"
+    id="floatCommentBtn"
+    title="Đến phần bình luận"
+    aria-label="Đến phần bình luận"
+    style="display:none;"
+  >
+    <i class="bi bi-chat-dots-fill"></i>
+    <span class="relife-float-comment-count" id="floatCommentCount">0</span>
+  </button>
 
   <!-- Version Badge -->
   <div class="relife-version-badge">

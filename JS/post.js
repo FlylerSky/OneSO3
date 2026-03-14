@@ -1,6 +1,10 @@
-// JS/post.js - Relife UI 1.6.0 - Notification Support
-// NEW: Support viewing notifications via ?notification=id param
-// Notifications are read-only (no comments, likes, follow)
+// JS/post.js - Relife UI 1.6.1
+// Base: v1.6.0 (Notification Support)
+// [#1] Post-header: avatar | (tên \n tag+time) | follow — layout gọn 2 dòng
+// [#2] Tiêu đề bài viết → header subtitle, truncate + modal khi dài
+// [#3] Like/Dislike cùng hàng (reactions-row), comment full-width
+// [#4] Sticky header ẩn/hiện khi scroll
+// [#5] Floating comment button ẩn/hiện cùng header
 import { initFirebase } from '../firebase-config.js';
 import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-auth.js";
 import {
@@ -26,8 +30,36 @@ const hiddenRenderer = document.getElementById('__qs_hidden_renderer');
 let currentPostData = null;
 let currentReplyTo = null;
 
+// Avatar cache
+const avatarCache = new Map();
+
+async function getUserAvatar(userId, fallbackName, knownAvatarUrl) {
+  // Nếu comment đã lưu avatarUrl trực tiếp → dùng luôn
+  if(knownAvatarUrl) {
+    if(userId) avatarCache.set(userId, knownAvatarUrl);
+    return knownAvatarUrl;
+  }
+  if(!userId) {
+    return `https://ui-avatars.com/api/?name=${encodeURIComponent(fallbackName||'U')}&background=0D6EFD&color=fff&size=128`;
+  }
+  if(avatarCache.has(userId)) return avatarCache.get(userId);
+  try {
+    const snap = await getDoc(doc(db, 'users', userId));
+    if(snap.exists()) {
+      const data = snap.data();
+      const url = data.avatarUrl ||
+        `https://ui-avatars.com/api/?name=${encodeURIComponent(data.displayName || fallbackName || 'U')}&background=0D6EFD&color=fff&size=128`;
+      avatarCache.set(userId, url);
+      return url;
+    }
+  } catch(e) {}
+  const fallback = `https://ui-avatars.com/api/?name=${encodeURIComponent(fallbackName||'U')}&background=0D6EFD&color=fff&size=128`;
+  avatarCache.set(userId, fallback);
+  return fallback;
+}
+
 // Utility functions
-const esc = s => String(s||'').replace(/[&<>\"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',"'":'&#39;'}[m]));
+const esc = s => String(s||'').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
 const fmtDate = ts => { 
   try {
     if(!ts?.toDate) return '';
@@ -56,8 +88,23 @@ function navigateToProfile(userId) {
 
 // DOMPurify config
 const PURIFY_CFG_ALLOW_CLASS = {
-  ADD_TAGS: ['iframe','table','thead','tbody','tfoot','tr','td','th','video','source','figure','figcaption','caption','pre','code','span','ul','ol','li'],
-  ADD_ATTR: ['style','class','id','width','height','allow','allowfullscreen','frameborder','controls','playsinline','loading','referrerpolicy','sandbox','data-*','src','srcdoc'],
+  ADD_TAGS: [
+    'iframe','table','thead','tbody','tfoot','tr','td','th',
+    'video','source','figure','figcaption','caption',
+    'pre','code','span','ul','ol','li',
+    'blockquote','h1','h2','h3','h4','h5','h6',
+    'sub','sup','s','u','mark','kbd','abbr',
+    'details','summary','hr','br'
+  ],
+  ADD_ATTR: [
+    'style','class','id',
+    'width','height','allow','allowfullscreen','frameborder',
+    'controls','playsinline','loading','referrerpolicy','sandbox',
+    'data-list','data-checked','data-indent','data-align','data-formula',
+    'data-id','data-row-span','data-col-span',
+    'src','srcdoc','href','target','rel',
+    'colspan','rowspan','scope'
+  ],
   FORBID_TAGS: ['script','object','embed'],
   KEEP_CONTENT: false
 };
@@ -67,20 +114,38 @@ const PURIFY_CFG_ALLOW_CLASS = {
  */
 function inlineComputedStyles(root) {
   if(!root) return;
+  const BLOCK_TAGS = /^(P|DIV|H[1-6]|LI|BLOCKQUOTE|PRE|TD|TH|CAPTION|FIGCAPTION|SUMMARY)$/i;
   const walk = el => {
     if(el.nodeType !== 1) return;
     const cs = window.getComputedStyle(el);
     try {
-      if(cs.fontSize) el.style.fontSize = cs.fontSize;
-      if(cs.fontFamily) el.style.fontFamily = cs.fontFamily;
-      if(cs.fontWeight) el.style.fontWeight = cs.fontWeight;
+      // Typography
+      if(cs.fontSize)     el.style.fontSize     = cs.fontSize;
+      if(cs.fontFamily)   el.style.fontFamily   = cs.fontFamily;
+      if(cs.fontWeight)   el.style.fontWeight   = cs.fontWeight;
       if(cs.fontStyle && cs.fontStyle !== 'normal') el.style.fontStyle = cs.fontStyle;
-      if(cs.textDecorationLine && cs.textDecorationLine !== 'none') el.style.textDecoration = cs.textDecorationLine;
-      if(cs.color) el.style.color = cs.color;
-      if(cs.backgroundColor && cs.backgroundColor !== 'rgba(0, 0, 0, 0)') el.style.backgroundColor = cs.backgroundColor;
-      if(cs.textAlign && el.tagName.match(/^(P|DIV|H[1-6]|LI|BLOCKQUOTE)$/i)) el.style.textAlign = cs.textAlign;
-      if(cs.lineHeight) el.style.lineHeight = cs.lineHeight;
+      // Text decoration (bold/italic/underline/strikethrough)
+      if(cs.textDecorationLine && cs.textDecorationLine !== 'none')
+        el.style.textDecoration = cs.textDecorationLine + ' ' + (cs.textDecorationStyle||'') + ' ' + (cs.textDecorationColor||'');
+      // Color & background
+      // Skip color/bg for code blocks — CSS handles them, inline styles would override
+      const inCodeBlock = el.closest && (el.closest('.ql-code-block-container') || el.closest('pre'));
+      if(!inCodeBlock) {
+        if(cs.color) el.style.color = cs.color;
+        if(cs.backgroundColor && cs.backgroundColor !== 'rgba(0, 0, 0, 0)')
+          el.style.backgroundColor = cs.backgroundColor;
+      }
+      // Block-level layout
+      if(BLOCK_TAGS.test(el.tagName)) {
+        if(cs.textAlign)   el.style.textAlign   = cs.textAlign;
+        if(cs.paddingLeft && cs.paddingLeft !== '0px') el.style.paddingLeft = cs.paddingLeft;
+      }
+      // Spacing
+      if(cs.lineHeight)   el.style.lineHeight   = cs.lineHeight;
       if(cs.letterSpacing && cs.letterSpacing !== 'normal') el.style.letterSpacing = cs.letterSpacing;
+      // Subscript / superscript via vertical-align
+      if(cs.verticalAlign && !['baseline','auto',''].includes(cs.verticalAlign))
+        el.style.verticalAlign = cs.verticalAlign;
     } catch(e){}
     Array.from(el.children).forEach(child => walk(child));
   };
@@ -132,16 +197,95 @@ function postProcessHtml(sanitizedHtml) {
   const wrapper = document.createElement('div');
   wrapper.innerHTML = sanitizedHtml;
 
-  // Remove Quill UI spans
-  wrapper.querySelectorAll('span.ql-ui').forEach(el => el.remove());
+  // ── Remove Quill UI chrome ────────────────────────────────────────────────
+  wrapper.querySelectorAll('span.ql-ui, .ql-clipboard, .ql-tooltip').forEach(el => el.remove());
 
-  // Normalize Quill paragraph lists
+  // ── Checklist (data-list="checked" / "unchecked") ────────────────────────
+  wrapper.querySelectorAll('li[data-list="checked"], li[data-list="unchecked"]').forEach(li => {
+    const checked = li.getAttribute('data-list') === 'checked';
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.disabled = true;
+    cb.checked = checked;
+    cb.className = 'ql-checklist-cb';
+    cb.style.cssText = 'margin-right:8px;vertical-align:middle;pointer-events:none;';
+    li.prepend(cb);
+    li.removeAttribute('data-list');
+    if(!li.closest('ul.ql-checklist')) {
+      // wrap in a special ul if needed
+      const parent = li.parentElement;
+      if(parent && !parent.classList.contains('ql-checklist')) {
+        parent.classList.add('ql-checklist');
+      }
+    }
+  });
+
+  // ── Indent (Quill adds class ql-indent-N via CSS paddingLeft) ────────────
+  // Already handled by inlineComputedStyles, but ensure data-indent attrs
+  // are converted to inline padding if not already present
+  for(let n = 1; n <= 8; n++) {
+    wrapper.querySelectorAll(`.ql-indent-${n}`).forEach(el => {
+      if(!el.style.paddingLeft) el.style.paddingLeft = (n * 3) + 'em';
+    });
+  }
+
+  // ── Normalize Quill paragraph lists → <ul>/<ol> ──────────────────────────
   normalizeQuillParagraphLists(wrapper);
-  
-  // Fix list container types
   fixListContainerTypes(wrapper);
 
-  // Wrap iframes
+  // ── Quill align classes → text-align inline ──────────────────────────────
+  ['center','right','justify'].forEach(align => {
+    wrapper.querySelectorAll(`.ql-align-${align}`).forEach(el => {
+      el.style.textAlign = align;
+    });
+  });
+
+  // ── Quill direction (RTL) ─────────────────────────────────────────────────
+  wrapper.querySelectorAll('.ql-direction-rtl').forEach(el => {
+    el.style.direction = 'rtl';
+    el.style.textAlign = el.style.textAlign || 'right';
+  });
+
+  // ── Code blocks: handle both Quill 2 (div.ql-code-block) and Quill 1 (pre.ql-syntax) ──
+  // Quill 2 renders: <div class="ql-code-block-container"><div class="ql-code-block">...</div></div>
+  // Quill 1 renders: <pre class="ql-syntax">...</pre>
+  // Both: wrap in .ql-code-block-container and ensure proper styling class
+
+  // Quill 1 pre tags
+  wrapper.querySelectorAll('pre.ql-syntax, pre[class*="language-"]').forEach(pre => {
+    if(pre.closest('.ql-code-block-container')) return;
+    const container = document.createElement('div');
+    container.className = 'ql-code-block-container';
+    pre.parentNode.replaceChild(container, pre);
+    container.appendChild(pre);
+  });
+
+  // Quill 2 div.ql-code-block — group consecutive siblings into one container
+  const codeBlocks = Array.from(wrapper.querySelectorAll('div.ql-code-block'));
+  const processed = new Set();
+  for(const block of codeBlocks) {
+    if(processed.has(block)) continue;
+    if(block.closest('.ql-code-block-container')) { processed.add(block); continue; }
+    // Collect consecutive siblings
+    const group = [block];
+    let next = block.nextElementSibling;
+    while(next && next.classList.contains('ql-code-block')) {
+      group.push(next);
+      next = next.nextElementSibling;
+    }
+    const container = document.createElement('div');
+    container.className = 'ql-code-block-container';
+    block.parentNode.insertBefore(container, block);
+    group.forEach(el => { container.appendChild(el); processed.add(el); });
+  }
+
+  // ── Images: ensure clickable for viewer ──────────────────────────────────
+  wrapper.querySelectorAll('img').forEach(img => {
+    if(!img.getAttribute('data-full')) img.setAttribute('data-full', img.src || img.getAttribute('src') || '');
+    img.style.cursor = 'zoom-in';
+  });
+
+  // ── Wrap iframes ─────────────────────────────────────────────────────────
   wrapper.querySelectorAll('iframe').forEach(iframe => {
     const src = iframe.getAttribute('src') || iframe.src || '';
     if(!src || src.trim() === '') return;
@@ -152,7 +296,7 @@ function postProcessHtml(sanitizedHtml) {
     container.appendChild(iframe);
   });
 
-  // Wrap tables
+  // ── Wrap tables ──────────────────────────────────────────────────────────
   wrapper.querySelectorAll('table').forEach(tbl => {
     if(tbl.closest('.table-wrapper')) return;
     const w = document.createElement('div');
@@ -161,16 +305,14 @@ function postProcessHtml(sanitizedHtml) {
     w.appendChild(tbl);
   });
 
-  // Ensure links open in new tab
+  // ── Links: secure + new tab ──────────────────────────────────────────────
   wrapper.querySelectorAll('a').forEach(a => {
     if(!a.target) a.setAttribute('target','_blank');
-    if(!a.rel) a.setAttribute('rel','noopener noreferrer');
+    if(!a.rel)    a.setAttribute('rel','noopener noreferrer');
   });
 
-  // Remove leftover data-list attributes
-  wrapper.querySelectorAll('[data-list]').forEach(el => {
-    el.removeAttribute('data-list');
-  });
+  // ── Clean leftover Quill data attrs ──────────────────────────────────────
+  wrapper.querySelectorAll('[data-list]').forEach(el => el.removeAttribute('data-list'));
 
   return wrapper.innerHTML;
 }
@@ -266,7 +408,7 @@ async function renderContent(rawContent) {
 }
 
 /**
- * Image Viewer (Performance-optimized)
+ * Image Viewer (Performance-optimized with RAF smooth animation)
  */
 function createImageViewerElements() {
   const existing = document.getElementById('os-image-viewer');
@@ -305,7 +447,7 @@ function createImageViewerElements() {
 
     if(changed) {
       img.style.transform = `translate3d(${rendered.tx}px, ${rendered.ty}px, 0) scale(${rendered.scale})`;
-      zoomIndicator.textContent = `${Math.round(rendered.scale * 100)}%`;
+      if(zoomIndicator) zoomIndicator.textContent = `${Math.round(rendered.scale * 100)}%`;
     }
     rafId = requestAnimationFrame(rafLoop);
   }
@@ -313,33 +455,35 @@ function createImageViewerElements() {
   function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
 
   function resetToFit() {
-    const rect = img.getBoundingClientRect();
-    const containerRect = inner.getBoundingClientRect();
+    // With transform-origin: center center, tx=0/ty=0 means perfectly centered
     target.scale = 1;
-    target.tx = (containerRect.width - rect.width) / 2;
-    target.ty = (containerRect.height - rect.height) / 2;
+    target.tx = 0;
+    target.ty = 0;
   }
 
   function open(src) {
     if(!src) return;
     overlay.classList.add('open');
     document.body.style.overflow = 'hidden';
+    // Reset state immediately so there's no flash of wrong position
+    target = { scale: 1, tx: 0, ty: 0 };
+    rendered = { scale: 1, tx: 0, ty: 0 };
+    img.style.transform = 'translate3d(0,0,0) scale(1)';
     img.src = src;
     img.onload = () => {
-      target.scale = 1;
-      rendered.scale = 1; rendered.tx = 0; rendered.ty = 0;
-      const rect = img.getBoundingClientRect();
-      const containerRect = inner.getBoundingClientRect();
-      target.tx = (containerRect.width - rect.width) / 2;
-      target.ty = (containerRect.height - rect.height) / 2;
+      target = { scale: 1, tx: 0, ty: 0 };
+      rendered = { scale: 1, tx: 0, ty: 0 };
+      img.style.transform = 'translate3d(0,0,0) scale(1)';
       if(!rafId) rafLoop();
-      downloadAnchor.href = src;
-      try {
-        const url = new URL(src, location.href);
-        const fn = url.pathname.split('/').pop() || 'image';
-        downloadAnchor.setAttribute('download', fn);
-      } catch(e) {
-        downloadAnchor.removeAttribute('download');
+      if(downloadAnchor) {
+        downloadAnchor.href = src;
+        try {
+          const url = new URL(src, location.href);
+          const fn = url.pathname.split('/').pop() || 'image';
+          downloadAnchor.setAttribute('download', fn);
+        } catch(e) {
+          downloadAnchor.removeAttribute('download');
+        }
       }
       overlay.focus();
     };
@@ -354,15 +498,17 @@ function createImageViewerElements() {
     rendered = { scale: 1, tx: 0, ty: 0 };
   }
 
-  controls.addEventListener('click', ev => {
-    ev.stopPropagation();
-    const action = ev.target.closest('[data-action]')?.getAttribute('data-action');
-    if(!action) return;
-    if(action === 'zoom-in') { target.scale = clamp(target.scale * 1.25, 0.2, 6); }
-    else if(action === 'zoom-out') { target.scale = clamp(target.scale / 1.25, 0.2, 6); }
-    else if(action === 'fit') { resetToFit(); }
-    else if(action === 'close') { close(); }
-  });
+  if(controls) {
+    controls.addEventListener('click', ev => {
+      ev.stopPropagation();
+      const action = ev.target.closest('[data-action]')?.getAttribute('data-action');
+      if(!action) return;
+      if(action === 'zoom-in') { target.scale = clamp(target.scale * 1.25, 0.2, 6); }
+      else if(action === 'zoom-out') { target.scale = clamp(target.scale / 1.25, 0.2, 6); }
+      else if(action === 'fit') { resetToFit(); }
+      else if(action === 'close') { close(); }
+    });
+  }
 
   overlay.addEventListener('click', ev => {
     if(ev.target === overlay) close();
@@ -426,8 +572,11 @@ function createImageViewerElements() {
   return api;
 }
 
+let _imageViewerAttached = false;
 function attachImageViewerToContent() {
   createImageViewerElements();
+  if(_imageViewerAttached) return;
+  _imageViewerAttached = true;
   document.addEventListener('click', (ev) => {
     const target = ev.target;
     if(!target) return;
@@ -533,9 +682,122 @@ async function toggleFollow(targetUserId) {
   }
 }
 
+// ─────────────────────────────────────────────────────────────
+// [#2] Header title helpers
+// ─────────────────────────────────────────────────────────────
+
 /**
- * ✅ NEW: Load and render content (supports both posts and notifications)
+ * Ghi tiêu đề vào thanh header.
+ * Nếu tiêu đề bị cắt (overflow) thì thêm class is-truncated
+ * và gắn click để mở titleModal hiển thị đầy đủ.
  */
+function setHeaderTitle(title) {
+  const el = document.getElementById('postTitleHeader');
+  if(!el) return;
+  el.textContent = title || 'Chi tiết nội dung';
+  el.classList.toggle('has-title', !!title);
+  el.setAttribute('title', title || '');
+
+  // Fill modal content
+  const modalContent = document.getElementById('titleModalContent');
+  if(modalContent) modalContent.textContent = title || '';
+
+  // Check truncation after paint
+  requestAnimationFrame(() => {
+    const isTruncated = el.scrollWidth > el.clientWidth;
+    if(isTruncated) {
+      el.classList.add('is-truncated');
+      el.onclick = openTitleModal;
+    } else {
+      el.classList.remove('is-truncated');
+      el.onclick = null;
+    }
+  });
+}
+
+function openTitleModal() {
+  document.getElementById('titleModalOverlay')?.classList.add('show');
+  document.getElementById('titleModal')?.classList.add('show');
+}
+
+function closeTitleModal() {
+  document.getElementById('titleModalOverlay')?.classList.remove('show');
+  document.getElementById('titleModal')?.classList.remove('show');
+}
+
+function initTitleModal() {
+  document.getElementById('titleModalClose')?.addEventListener('click', closeTitleModal);
+  document.getElementById('titleModalOverlay')?.addEventListener('click', closeTitleModal);
+  document.addEventListener('keydown', e => {
+    if(e.key === 'Escape') closeTitleModal();
+  });
+}
+
+// ─────────────────────────────────────────────────────────────
+// [#4] Sticky header + [#5] Float button — scroll logic
+// ─────────────────────────────────────────────────────────────
+function initScrollBehaviour() {
+  const header   = document.getElementById('stickyHeader');
+  const floatBtn = document.getElementById('floatCommentBtn');
+  if(!header) return;
+
+  let lastScrollY = window.scrollY;
+  let ticking = false;
+
+  function onScroll() {
+    if(ticking) return;
+    ticking = true;
+    requestAnimationFrame(() => {
+      const currentY = window.scrollY;
+      const scrollingDown = currentY > lastScrollY;
+
+      // Chỉ ẩn khi đã scroll xuống ít nhất 60px
+      if(currentY > 60) {
+        header.classList.toggle('header-hidden', scrollingDown);
+        if(floatBtn && floatBtn.style.display !== 'none') {
+          floatBtn.classList.toggle('btn-hidden', scrollingDown);
+        }
+      } else {
+        header.classList.remove('header-hidden');
+        if(floatBtn) floatBtn.classList.remove('btn-hidden');
+      }
+
+      lastScrollY = currentY;
+      ticking = false;
+    });
+  }
+
+  window.addEventListener('scroll', onScroll, { passive: true });
+}
+
+// ─────────────────────────────────────────────────────────────
+// [#5] Floating comment button
+// ─────────────────────────────────────────────────────────────
+function initFloatCommentBtn() {
+  const btn = document.getElementById('floatCommentBtn');
+  if(!btn) return;
+  btn.addEventListener('click', () => {
+    const form = document.getElementById('commentFormArea');
+    const section = document.getElementById('commentsSection');
+    const target = form || section;
+    if(target) {
+      target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      setTimeout(() => {
+        const input = document.getElementById('commentText');
+        if(input) input.focus();
+      }, 600);
+    }
+  });
+}
+
+function syncFloatCommentCount(count) {
+  const badge = document.getElementById('floatCommentCount');
+  if(badge) badge.textContent = count;
+}
+
+// ─────────────────────────────────────────────────────────────
+// Load & render content
+// ─────────────────────────────────────────────────────────────
 async function load() {
   if(!contentId) {
     postArea.innerHTML = `
@@ -553,16 +815,16 @@ async function load() {
   }
 
   try {
-    // ✅ NEW: Load from appropriate collection
+    // ✅ Load from appropriate collection
     const collectionName = isNotification ? 'notifications' : 'posts';
     const snap = await getDoc(doc(db, collectionName, contentId));
-    
+
     if(!snap.exists()) {
       postArea.innerHTML = `
         <div class="relife-glass-card">
           <div class="text-center text-muted py-5">
             <i class="bi bi-file-earmark-x" style="font-size: 3rem; margin-bottom: 1rem;"></i>
-            <div>Không tìm thấy ${isNotification ? 'thông báo' : 'bài viết'}</div>
+            <div>Không tìm thấy ${isNotification ? 'thông báo' : 'bài viết'}.</div>
             <a href="${isNotification ? 'notification.html' : 'index.html'}" class="relife-btn-primary mt-3">
               Về ${isNotification ? 'trang thông báo' : 'trang chủ'}
             </a>
@@ -572,29 +834,26 @@ async function load() {
       return;
     }
 
-    const d = snap.data();
-    currentPostData = d;
+    const d = { id: snap.id, ...snap.data() };
+    if(!isNotification) currentPostData = d;
 
-    // ✅ NEW: Build header based on content type
+    // ─── Build header HTML ───────────────────────────────
     let headerHtml = '';
-    
+    let followBtnHtml = '';
+
     if(isNotification) {
-      // Notification header (read-only, no author)
-      const categoryIcon = getCategoryIcon(d.category);
-      const categoryLabel = getCategoryLabel(d.category);
-      const priorityBadge = d.priority === 'high' 
-        ? '<span class="relife-notification-badge priority-high"><i class="bi bi-exclamation-triangle-fill"></i> Quan trọng</span>' 
-        : '';
-      
+      // Notification-specific header
+      const icon = getCategoryIcon(d.category);
+      const label = getCategoryLabel(d.category);
       headerHtml = `
         <div class="relife-post-header">
-          <div class="relife-notification-icon">
-            ${categoryIcon}
-          </div>
+          <div class="relife-notification-icon">${icon}</div>
           <div class="relife-author-info">
             <div class="relife-notification-category">
-              ${categoryLabel}
-              ${priorityBadge}
+              ${label}
+              <span class="relife-notification-badge priority-${d.priority || 'normal'}">
+                ${d.priority === 'high' ? 'Quan trọng' : 'Thông báo'}
+              </span>
             </div>
             <div class="relife-post-time">
               <i class="bi bi-clock"></i>
@@ -604,10 +863,9 @@ async function load() {
         </div>
       `;
     } else {
-      // Post header (with author, follow button, etc.)
-      let authorAvatar = '';
-      let followBtnHtml = '';
-      
+      // Post header — [#1] avatar | (tên \n tag+time) | follow
+      let authorAvatar = `https://ui-avatars.com/api/?name=U&background=0D6EFD&color=fff&size=128`;
+
       if(d.userId) {
         const userSnap = await getDoc(doc(db, 'users', d.userId));
         const prof = userSnap.exists() ? userSnap.data() : null;
@@ -626,7 +884,8 @@ async function load() {
             </button>
           `;
         }
-        
+
+        // [#1] Layout gọn: avatar | (tên trên / tag+time dưới) | nút follow
         headerHtml = `
           <div class="relife-post-header">
             <img src="${authorAvatar}" class="relife-author-avatar" alt="avatar" onclick="window.navigateToProfile('${d.userId}')">
@@ -638,12 +897,13 @@ async function load() {
                   <i class="bi bi-clock"></i>
                   <span>${fmtDate(d.createdAt)}</span>
                 </div>
-                ${followBtnHtml}
               </div>
             </div>
+            ${followBtnHtml}
           </div>
         `;
       } else {
+        // Trial / anonymous author
         authorAvatar = `https://ui-avatars.com/api/?name=${encodeURIComponent(d.displayName||'T')}&background=FFC107&color=000&size=128`;
         headerHtml = `
           <div class="relife-post-header">
@@ -675,24 +935,26 @@ async function load() {
 
     // Hashtags (only for posts)
     const hashtagsHtml = !isNotification && d.hashtags 
-      ? (d.hashtags||[]).map(h => 
+      ? d.hashtags.map(h => 
           `<a href="tag.html?tag=${encodeURIComponent(h)}" class="relife-hashtag">
             <i class="bi bi-hash"></i>${esc(h.replace(/^#/, ''))}
           </a>`
         ).join('')
       : '';
 
-    // ✅ NEW: Reactions (only for posts)
+    // [#3] Reactions — Like/Dislike cùng hàng, Comment full-width dòng riêng
     const reactionsHtml = isNotification ? '' : `
       <div class="relife-reactions">
-        <button id="likeBtn" class="relife-reaction-btn">
-          <i class="bi bi-hand-thumbs-up-fill"></i>
-          <span id="likeCount">${d.likes||0}</span>
-        </button>
-        <button id="dislikeBtn" class="relife-reaction-btn">
-          <i class="bi bi-hand-thumbs-down-fill"></i>
-          <span id="dislikeCount">${d.dislikes||0}</span>
-        </button>
+        <div class="relife-reactions-row">
+          <button id="likeBtn" class="relife-reaction-btn">
+            <i class="bi bi-hand-thumbs-up-fill"></i>
+            <span id="likeCount">${d.likes||0}</span>
+          </button>
+          <button id="dislikeBtn" class="relife-reaction-btn">
+            <i class="bi bi-hand-thumbs-down-fill"></i>
+            <span id="dislikeCount">${d.dislikes||0}</span>
+          </button>
+        </div>
         <button id="commentToggle" class="relife-reaction-btn">
           <i class="bi bi-chat-dots-fill"></i>
           <span id="commentCountBtn">...</span>
@@ -704,7 +966,7 @@ async function load() {
     postArea.innerHTML = `
       <div class="relife-glass-card">
         ${headerHtml}
-        <h1 class="relife-post-title">${esc(d.title || 'Không có tiêu đề')}</h1>
+        ${!isNotification ? `<h1 class="relife-post-title">${esc(d.title || 'Không có tiêu đề')}</h1>` : ''}
         ${hashtagsHtml ? `<div class="relife-hashtags">${hashtagsHtml}</div>` : ''}
         <div id="postContentContainer" class="post-content">${rendered}</div>
         ${reactionsHtml}
@@ -714,12 +976,23 @@ async function load() {
     // Attach image viewer
     attachImageViewerToContent();
 
-    // ✅ NEW: Only show comments section for posts
+    // [#2] Set header title
+    if(!isNotification) {
+      setHeaderTitle(d.title || '');
+    } else {
+      setHeaderTitle(getCategoryLabel(d.category));
+    }
+
+    // ✅ Only show comments section for posts
     if(!isNotification) {
       commentsSection.style.display = 'block';
       document.getElementById('commentCount').textContent = '...';
       watchRealtime();
       updateReactionButtonsState();
+
+      // [#5] Show float button after post loaded
+      const floatBtn = document.getElementById('floatCommentBtn');
+      if(floatBtn) floatBtn.style.display = 'flex';
     } else {
       // Hide comments section for notifications
       commentsSection.style.display = 'none';
@@ -728,6 +1001,12 @@ async function load() {
     // Smooth scroll animation
     postArea.querySelector('.relife-glass-card').style.animation = 'fadeInUp 0.5s ease';
     
+    // Set back button destination based on content type
+    const backBtn = document.getElementById('nut_thoat');
+    if(backBtn) {
+      backBtn.href = isNotification ? 'notification.html' : 'index.html';
+    }
+
     // Bind events (share button and post-specific features)
     bindEvents();
 
@@ -749,7 +1028,7 @@ async function load() {
 }
 
 /**
- * ✅ Helper functions for notification display
+ * Helper functions for notification display
  */
 function getCategoryIcon(category) {
   const icons = {
@@ -786,8 +1065,12 @@ function watchRealtime() {
     renderComments(snap);
     
     const actualCount = snap.size;
-    document.getElementById('commentCountBtn').textContent = actualCount;
-    document.getElementById('commentCount').textContent = actualCount;
+    const countBtn = document.getElementById('commentCountBtn');
+    const countBadge = document.getElementById('commentCount');
+    if(countBtn) countBtn.textContent = actualCount;
+    if(countBadge) countBadge.textContent = actualCount;
+    // [#5] Sync float button badge
+    syncFloatCommentCount(actualCount);
   });
 
   // Watch post counters (likes/dislikes only)
@@ -835,20 +1118,20 @@ async function renderComments(snapshot) {
   });
   
   // Render root comments with their reply trees
-  rootComments.forEach((c, idx) => {
-    renderCommentWithReplies(list, c, idx, currentUser, replyMap, 0);
-  });
+  for(const [idx, c] of rootComments.entries()) {
+    await renderCommentWithReplies(list, c, idx, currentUser, replyMap, 0);
+  }
 }
 
 /**
  * Render comment with its reply tree (recursive)
  */
-function renderCommentWithReplies(parentContainer, comment, index, currentUser, replyMap, depth) {
+async function renderCommentWithReplies(parentContainer, comment, index, currentUser, replyMap, depth) {
   const replies = replyMap.get(comment.id) || [];
   const hasReplies = replies.length > 0;
   
   // Render the comment
-  const commentEl = renderCommentElement(comment, index, currentUser, depth, hasReplies, replies.length);
+  const commentEl = await renderCommentElement(comment, index, currentUser, depth, hasReplies, replies.length);
   parentContainer.appendChild(commentEl);
   
   // Create collapsible replies container
@@ -859,9 +1142,9 @@ function renderCommentWithReplies(parentContainer, comment, index, currentUser, 
     repliesContainer.style.display = 'none'; // Hidden by default
     
     // Render each reply recursively
-    replies.forEach((reply, replyIdx) => {
-      renderCommentWithReplies(repliesContainer, reply, replyIdx, currentUser, replyMap, depth + 1);
-    });
+    for(const [replyIdx, reply] of replies.entries()) {
+      await renderCommentWithReplies(repliesContainer, reply, replyIdx, currentUser, replyMap, depth + 1);
+    }
     
     parentContainer.appendChild(repliesContainer);
   }
@@ -870,8 +1153,8 @@ function renderCommentWithReplies(parentContainer, comment, index, currentUser, 
 /**
  * Render individual comment element with collapse support
  */
-function renderCommentElement(comment, index, currentUser, depth, hasReplies, replyCount) {
-  const avatar = `https://ui-avatars.com/api/?name=${encodeURIComponent(comment.displayName||'U')}&background=0D6EFD&color=fff&size=80`;
+async function renderCommentElement(comment, index, currentUser, depth, hasReplies, replyCount) {
+  const avatar = await getUserAvatar(comment.userId, comment.displayName, comment.avatarUrl || null);
   const isOwnComment = currentUser && comment.userId === currentUser.uid;
   const isAuthor = currentPostData && comment.userId === currentPostData.userId;
   
@@ -887,12 +1170,7 @@ function renderCommentElement(comment, index, currentUser, depth, hasReplies, re
   // Reply to indicator (for replies only)
   let replyToHtml = '';
   if(comment.replyTo && comment.replyToName) {
-    replyToHtml = `
-      <div class="relife-reply-to" onclick="window.scrollToComment('${comment.replyTo}')">
-        <i class="bi bi-reply-fill"></i>
-        <span>Phản hồi ${esc(comment.replyToName)}</span>
-      </div>
-    `;
+    replyToHtml = `<div class="reply-to-badge" onclick="window.scrollToComment('${comment.replyTo}')"><i class="bi bi-reply-fill"></i><span>Phản hồi ${esc(comment.replyToName)}</span></div>`;
   }
   
   // Parse mentions in text
@@ -901,253 +1179,155 @@ function renderCommentElement(comment, index, currentUser, depth, hasReplies, re
   // Edited badge
   let editedBadge = '';
   if(comment.editedAt) {
-    editedBadge = `
-      <span class="relife-edited-badge">
-        <i class="bi bi-pencil-fill"></i>
-        <span>Đã chỉnh sửa</span>
-      </span>
-    `;
+    editedBadge = `<span class="edited-badge"><i class="bi bi-pencil-fill"></i><span>Đã chỉnh sửa</span></span>`;
   }
   
   // Report warning badge
   let reportBadge = '';
   if(isReported) {
-    reportBadge = `
-      <span class="relife-report-badge">
-        <i class="bi bi-flag-fill"></i>
-        <span>${reportCount} báo cáo</span>
-      </span>
-    `;
+    reportBadge = `<span class="report-badge"><i class="bi bi-flag-fill"></i><span>${reportCount} báo cáo</span></span>`;
   }
+  
+  // Author badge
+  const authorBadge = isAuthor ? `<span class="author-badge"><i class="bi bi-patch-check-fill"></i> Tác giả</span>` : '';
   
   // Actions
-  let actionsHtml = `
-    <div class="relife-comment-actions">
-      <button class="relife-comment-action-btn" onclick="window.setReplyTo('${comment.id}', '${esc(comment.displayName)}')">
-        <i class="bi bi-reply-fill"></i>
-        <span>Trả lời</span>
-      </button>
-  `;
+  let actionsHtml = `<div class="comment-actions"><button class="comment-action-btn" onclick="window.setReplyTo('${comment.id}', '${esc(comment.displayName)}')"><i class="bi bi-reply-fill"></i><span>Trả lời</span></button>`;
   
   if(isOwnComment) {
-    actionsHtml += `
-      <button class="relife-comment-action-btn" onclick="window.editComment('${comment.id}')">
-        <i class="bi bi-pencil-fill"></i>
-        <span>Sửa</span>
-      </button>
-      <button class="relife-comment-action-btn delete" onclick="window.deleteComment('${comment.id}')">
-        <i class="bi bi-trash-fill"></i>
-        <span>Xóa</span>
-      </button>
-    `;
+    actionsHtml += `<button class="comment-action-btn" onclick="window.editComment('${comment.id}')"><i class="bi bi-pencil-fill"></i><span>Sửa</span></button><button class="comment-action-btn delete" onclick="window.deleteComment('${comment.id}')"><i class="bi bi-trash-fill"></i><span>Xóa</span></button>`;
   } else {
-    // Can report if not own comment
-    actionsHtml += `
-      <button class="relife-comment-action-btn delete" onclick="window.openReportModal('${comment.id}')">
-        <i class="bi bi-flag-fill"></i>
-        <span>Báo cáo</span>
-      </button>
-    `;
+    actionsHtml += `<button class="comment-action-btn delete" onclick="window.openReportModal('${comment.id}')"><i class="bi bi-flag-fill"></i><span>Báo cáo</span></button>`;
   }
-  
   actionsHtml += '</div>';
   
   // Toggle replies button (if has replies)
   let toggleRepliesHtml = '';
   if(hasReplies) {
-    toggleRepliesHtml = `
-      <button class="relife-toggle-replies" onclick="window.toggleReplies('${comment.id}')" id="toggle-${comment.id}">
-        <i class="bi bi-chevron-down"></i>
-        <span>Xem ${replyCount} phản hồi</span>
-      </button>
-    `;
+    toggleRepliesHtml = `<button class="toggle-replies" onclick="window.toggleReplies('${comment.id}')" id="toggle-${comment.id}"><i class="bi bi-chevron-down"></i><span>Xem ${replyCount} phản hồi</span></button>`;
   }
   
-  const commentEl = document.createElement('div');
-  commentEl.className = `relife-comment ${replyLevelClass}${reportedClass}`;
-  commentEl.id = `comment-${comment.id}`;
-  commentEl.setAttribute('data-comment-data', JSON.stringify({text: comment.text, mentions: comment.mentions || []}));
-  commentEl.style.animationDelay = `${index * 0.05}s`;
-  
-  commentEl.innerHTML = `
-    <div class="relife-comment-header">
-      <img src="${avatar}" class="relife-comment-avatar" alt="avatar" onclick="window.navigateToProfile('${comment.userId}')">
-      <div class="relife-comment-author">
-        <div>
-          <span class="relife-comment-name" onclick="window.navigateToProfile('${comment.userId}')">${esc(comment.displayName||'Ẩn danh')}</span>
-          ${isAuthor ? '<span class="relife-author-badge"><i class="bi bi-patch-check-fill"></i> Tác giả</span>' : ''}
-          ${editedBadge}
-          ${reportBadge}
-        </div>
-        <div class="relife-comment-time">
-          <i class="bi bi-clock"></i>
-          <span>${fmtDate(comment.createdAt)}</span>
-        </div>
+  const el = document.createElement('div');
+  el.className = `comment-item ${replyLevelClass}${reportedClass}`;
+  el.id = `comment-${comment.id}`;
+  el.setAttribute('data-comment-data', JSON.stringify({text: comment.text, mentions: comment.mentions || []}));
+  el.innerHTML = `
+    <div class="comment-header">
+      <img src="${avatar}" class="comment-avatar" alt="avatar" onclick="window.navigateToProfile('${comment.userId}')">
+      <div class="comment-author">
+        <div><span class="comment-name" onclick="window.navigateToProfile('${comment.userId}')">${esc(comment.displayName||'Ẩn danh')}</span>${authorBadge}${editedBadge}${reportBadge}</div>
+        <div class="comment-time"><i class="bi bi-clock"></i><span>${fmtDate(comment.createdAt)}</span></div>
       </div>
     </div>
     ${replyToHtml}
-    <div class="relife-comment-text">${displayText}</div>
+    <div class="comment-text">${displayText}</div>
     ${actionsHtml}
     ${toggleRepliesHtml}
   `;
-  
-  return commentEl;
+  return el;
 }
 
-/**
- * Parse @mentions in comment text
- */
-function parseMentions(text, mentionedUserIds) {
-  if(!mentionedUserIds || mentionedUserIds.length === 0) {
-    return esc(text);
-  }
-  
-  // Escape HTML first
-  let result = esc(text);
-  
-  // Find @mentions and wrap in clickable spans
-  const mentionRegex = /@(\w+)/g;
-  result = result.replace(mentionRegex, (match, tagName) => {
-    return `<span class="relife-mention" onclick="window.navigateToMention('@${esc(tagName)}')">${match}</span>`;
-  });
-  
-  return result;
-}
+// ═══════════════════════════════════════════════════════════
+// v1.5 FEATURES: Edit, Report, Mention (POSTS ONLY)
+// ═══════════════════════════════════════════════════════════
 
 /**
- * Navigate to mentioned user's profile
+ * Edit comment
  */
-window.navigateToMention = async function(tagName) {
-  try {
-    // Search for user by tagName
-    const usersRef = collection(db, 'users');
-    const q = query(usersRef, where('tagName', '==', tagName));
-    const snapshot = await getDocs(q);
-    
-    if(!snapshot.empty) {
-      const userId = snapshot.docs[0].id;
-      window.navigateToProfile(userId);
-    } else {
-      alert('Không tìm thấy người dùng này.');
-    }
-  } catch(err) {
-    console.error('Navigate to mention error:', err);
-  }
-};
+let currentEditingCommentId = null;
 
-/**
- * Scroll to and highlight parent comment
- */
-window.scrollToComment = function(commentId) {
+window.editComment = function(commentId) {
+  if(currentEditingCommentId) {
+    const prevForm = document.getElementById(`edit-form-${currentEditingCommentId}`);
+    if(prevForm) prevForm.remove();
+  }
+  
   const commentEl = document.getElementById(`comment-${commentId}`);
-  if(!commentEl) {
-    console.warn('Comment not found:', commentId);
-    return;
-  }
+  if(!commentEl) return;
   
-  // First, expand all parent containers if comment is hidden
-  let parentContainer = commentEl.closest('.relife-replies-container');
-  while(parentContainer) {
-    const parentCommentId = parentContainer.id.replace('replies-', '');
-    const toggleBtn = document.getElementById(`toggle-${parentCommentId}`);
-    
-    // Expand if collapsed
-    if(parentContainer.style.display === 'none') {
-      parentContainer.style.display = 'block';
-      if(toggleBtn) {
-        toggleBtn.innerHTML = '<i class="bi bi-chevron-up"></i><span>Ẩn phản hồi</span>';
-        toggleBtn.classList.add('expanded');
-      }
-    }
-    
-    // Move to next parent level
-    parentContainer = parentContainer.parentElement?.closest('.relife-replies-container');
-  }
+  // Get original text from data attribute
+  let originalText = '';
+  try {
+    const dataAttr = commentEl.getAttribute('data-comment-data');
+    originalText = JSON.parse(dataAttr)?.text || '';
+  } catch(e) {}
   
-  // Scroll to comment with smooth animation
-  commentEl.scrollIntoView({ 
-    behavior: 'smooth', 
-    block: 'center' 
-  });
+  currentEditingCommentId = commentId;
   
-  // Add highlight effect
-  commentEl.classList.add('highlight');
+  const form = document.createElement('div');
+  form.className = 'edit-comment-form';
+  form.id = `edit-form-${commentId}`;
+  form.innerHTML = `
+    <textarea class="edit-textarea" id="edit-textarea-${commentId}" placeholder="Nhập @username để gắn tag...">${esc(originalText)}</textarea>
+    <div class="edit-buttons">
+      <button class="btn-save" onclick="window.saveEdit('${commentId}')"><i class="bi bi-check-lg"></i> Lưu</button>
+      <button class="btn-cancel" onclick="window.cancelEdit('${commentId}')">Hủy</button>
+    </div>
+  `;
   
-  // Remove highlight after animation
-  setTimeout(() => {
-    commentEl.classList.remove('highlight');
-  }, 2000);
-};
-
-/**
- * Toggle replies visibility
- */
-window.toggleReplies = function(commentId) {
-  const repliesContainer = document.getElementById(`replies-${commentId}`);
-  const toggleBtn = document.getElementById(`toggle-${commentId}`);
+  const commentText = commentEl.querySelector('.comment-text');
+  if(commentText) commentText.after(form);
+  else commentEl.appendChild(form);
   
-  if(!repliesContainer || !toggleBtn) return;
-  
-  const isHidden = repliesContainer.style.display === 'none';
-  
-  if(isHidden) {
-    repliesContainer.style.display = 'block';
-    toggleBtn.innerHTML = '<i class="bi bi-chevron-up"></i><span>Ẩn phản hồi</span>';
-    toggleBtn.classList.add('expanded');
-  } else {
-    repliesContainer.style.display = 'none';
-    const replyCount = repliesContainer.querySelectorAll('.relife-comment').length;
-    toggleBtn.innerHTML = `<i class="bi bi-chevron-down"></i><span>Xem ${replyCount} phản hồi</span>`;
-    toggleBtn.classList.remove('expanded');
+  const textarea = document.getElementById(`edit-textarea-${commentId}`);
+  if(textarea) {
+    textarea.focus();
+    textarea.setSelectionRange(textarea.value.length, textarea.value.length);
+    setupMentionAutocomplete(textarea);
   }
 };
 
-/**
- * Set reply target
- */
-window.setReplyTo = function(commentId, displayName) {
+window.cancelEdit = function(commentId) {
+  const form = document.getElementById(`edit-form-${commentId}`);
+  if(form) form.remove();
+  currentEditingCommentId = null;
+};
+
+window.saveEdit = async function(commentId) {
+  if(isNotification) return;
+  
+  const textarea = document.getElementById(`edit-textarea-${commentId}`);
+  if(!textarea) return;
+  
+  const newText = textarea.value.trim();
+  if(!newText) return alert('Nội dung không được để trống.');
+  
   const user = auth.currentUser;
-  if(!user) {
-    alert('Bạn cần đăng nhập để trả lời bình luận.');
-    return;
-  }
+  if(!user) return alert('Bạn cần đăng nhập.');
   
-  currentReplyTo = { id: commentId, name: displayName };
-  
-  const indicator = document.getElementById('replyIndicator');
-  const nameSpan = document.getElementById('replyToName');
-  
-  if(indicator && nameSpan) {
-    nameSpan.textContent = `Đang trả lời ${displayName}`;
-    indicator.style.display = 'flex';
-  }
-  
-  const input = document.getElementById('commentText');
-  if(input) {
-    input.focus();
-    input.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  try {
+    const mentions = extractMentions(newText);
+    const mentionedUserIds = await resolveMentions(mentions);
+    
+    await updateDoc(doc(db, 'posts', contentId, 'comments', commentId), {
+      text: newText,
+      mentions: mentionedUserIds,
+      editedAt: serverTimestamp(),
+      editCount: increment(1)
+    });
+    window.cancelEdit(commentId);
+  } catch(err) {
+    console.error('Edit error:', err);
+    alert('Không thể sửa bình luận. Vui lòng thử lại.');
   }
 };
 
 /**
- * Cancel reply
+ * Delete comment (with cascade delete of all nested replies)
  */
-document.addEventListener('DOMContentLoaded', () => {
-  const cancelBtn = document.getElementById('cancelReply');
-  if(cancelBtn) {
-    cancelBtn.addEventListener('click', () => {
-      currentReplyTo = null;
-      const indicator = document.getElementById('replyIndicator');
-      if(indicator) indicator.style.display = 'none';
-    });
-  }
-});
+let allComments = [];
 
-/**
- * Delete comment - SIMPLIFIED (No counter update needed)
- */
+function findAllReplies(commentId, comments) {
+  const directReplies = comments.filter(c => c.replyTo === commentId);
+  let allReplies = [...directReplies];
+  directReplies.forEach(reply => {
+    allReplies = allReplies.concat(findAllReplies(reply.id, comments));
+  });
+  return allReplies;
+}
+
 window.deleteComment = async function(commentId) {
-  if(isNotification) return; // Cannot delete comments on notifications
+  if(!confirm('Bạn chắc chắn muốn xóa bình luận này?')) return;
   
   const user = auth.currentUser;
   if(!user) {
@@ -1155,42 +1335,24 @@ window.deleteComment = async function(commentId) {
     return;
   }
   
-  if(!confirm('Bạn có chắc muốn xóa bình luận này?\n(Tất cả phản hồi cũng sẽ bị xóa)')) return;
-  
   try {
-    // Step 1: Get all comments to find replies
-    const commentsRef = collection(db, 'posts', contentId, 'comments');
-    const allCommentsSnap = await getDocs(commentsRef);
-    const allComments = [];
-    allCommentsSnap.forEach(doc => {
-      allComments.push({ id: doc.id, ...doc.data() });
-    });
-    
-    // Step 2: Build reply tree to find all nested replies
-    const findAllReplies = (parentId, commentsList) => {
-      const directReplies = commentsList.filter(c => c.replyTo === parentId);
-      let allReplies = [...directReplies];
-      
-      // Recursively find nested replies
-      directReplies.forEach(reply => {
-        allReplies = allReplies.concat(findAllReplies(reply.id, commentsList));
-      });
-      
-      return allReplies;
-    };
-    
-    // Step 3: Find target comment and all its nested replies
-    const targetComment = allComments.find(c => c.id === commentId);
-    if(!targetComment) {
-      alert('Không tìm thấy bình luận.');
+    // Step 1: Verify comment exists and belongs to user
+    const commentSnap = await getDoc(doc(db, 'posts', contentId, 'comments', commentId));
+    if(!commentSnap.exists()) {
+      alert('Bình luận không tồn tại.');
       return;
     }
     
-    // Check ownership
+    // Step 2: Verify ownership
+    const targetComment = commentSnap.data();
     if(targetComment.userId !== user.uid) {
       alert('Bạn chỉ có thể xóa bình luận của mình.');
       return;
     }
+    
+    // Step 3: Get all comments to find nested replies
+    const commentsSnap = await getDocs(collection(db, 'posts', contentId, 'comments'));
+    allComments = commentsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
     
     const repliesToDelete = findAllReplies(commentId, allComments);
     const totalToDelete = 1 + repliesToDelete.length;
@@ -1249,7 +1411,7 @@ function bindEvents() {
   document.getElementById('likeBtn').addEventListener('click', () => toggleReaction(contentId, 'like'));
   document.getElementById('dislikeBtn').addEventListener('click', () => toggleReaction(contentId, 'dislike'));
   
-  // Comment toggle - smooth scroll
+  // [#3/#5] Comment toggle - smooth scroll to comment form
   document.getElementById('commentToggle').addEventListener('click', () => {
     const commentForm = document.getElementById('commentFormArea');
     if(commentForm) {
@@ -1270,7 +1432,7 @@ function bindEvents() {
     
     const btn = document.getElementById('sendComment');
     btn.disabled = true;
-    btn.innerHTML = '<i class="bi bi-hourglass-split"></i><span>Đang gửi...</span>';
+    btn.innerHTML = '<i class="bi bi-hourglass-split"></i>';
     
     try {
       const udoc = await getDoc(doc(db, 'users', user.uid));
@@ -1283,6 +1445,7 @@ function bindEvents() {
       const commentData = {
         displayName: prof?.displayName || user.email,
         userId: user.uid,
+        avatarUrl: prof?.avatarUrl || null,
         text,
         createdAt: serverTimestamp(),
         mentions: mentionedUserIds,
@@ -1305,16 +1468,16 @@ function bindEvents() {
       if(indicator) indicator.style.display = 'none';
       
       // Success feedback
-      btn.innerHTML = '<i class="bi bi-check-lg"></i><span>Đã gửi</span>';
+      btn.innerHTML = '<i class="bi bi-check-lg"></i>';
       setTimeout(() => {
         btn.disabled = false;
-        btn.innerHTML = '<i class="bi bi-send-fill"></i><span>Gửi bình luận</span>';
+        btn.innerHTML = '<i class="bi bi-send-fill"></i>';
       }, 1500);
     } catch(err) {
       console.error('Comment error:', err);
       alert('Không thể gửi bình luận. Vui lòng thử lại.');
       btn.disabled = false;
-      btn.innerHTML = '<i class="bi bi-send-fill"></i><span>Gửi bình luận</span>';
+      btn.innerHTML = '<i class="bi bi-send-fill"></i>';
     }
   });
 
@@ -1334,6 +1497,13 @@ function bindEvents() {
       document.getElementById('commentFormArea').style.display = 'none';
     }
     updateReactionButtonsState();
+  });
+
+  // Cancel reply
+  document.getElementById('cancelReply')?.addEventListener('click', () => {
+    currentReplyTo = null;
+    const indicator = document.getElementById('replyIndicator');
+    if(indicator) indicator.style.display = 'none';
   });
 }
 
@@ -1435,235 +1605,143 @@ document.addEventListener('visibilitychange', () => {
   }
 });
 
-// Initialize
-load();
+/**
+ * Mention helpers
+ */
+function parseMentions(text, mentionedUserIds) {
+  if(!text) return '';
+  const escaped = esc(text);
+  return escaped.replace(/@(\S+)/g, (match, tag) => {
+    return `<span class="mention" onclick="window.navigateToMention('@${esc(tag)}')">${esc(match)}</span>`;
+  });
+}
 
-// ═══════════════════════════════════════════════════════════
-// v1.5 FEATURES: Edit, Report, Mention (POSTS ONLY)
-// ═══════════════════════════════════════════════════════════
+function extractMentions(text) {
+  const matches = text.match(/@(\S+)/g) || [];
+  return matches.map(m => m.slice(1).toLowerCase());
+}
+
+async function resolveMentions(tags) {
+  if(!tags.length) return [];
+  try {
+    const usersRef = collection(db, 'users');
+    const snap = await getDocs(usersRef);
+    const ids = [];
+    snap.forEach(d => {
+      const data = d.data();
+      const tagName = (data.tagName || '').toLowerCase().replace(/^@/, '');
+      if(tags.includes(tagName) || tags.includes('@' + tagName)) ids.push(d.id);
+    });
+    return ids;
+  } catch(e) { return []; }
+}
+
+window.navigateToMention = async function(tagName) {
+  try {
+    const snap = await getDocs(collection(db, 'users'));
+    let targetId = null;
+    snap.forEach(d => {
+      if((d.data().tagName || '').toLowerCase() === tagName.toLowerCase()) targetId = d.id;
+    });
+    if(targetId) {
+      navigateToProfile(targetId);
+    } else {
+      alert(`Không tìm thấy người dùng ${tagName}`);
+    }
+  } catch(err) {
+    console.error('Navigate to mention error:', err);
+  }
+};
 
 /**
- * Edit comment
+ * Scroll to and highlight parent comment
  */
-let currentEditingCommentId = null;
-
-window.editComment = async function(commentId) {
-  if(isNotification) return;
-  
+window.scrollToComment = function(commentId) {
   const commentEl = document.getElementById(`comment-${commentId}`);
-  if(!commentEl) return;
-  
-  const commentData = JSON.parse(commentEl.getAttribute('data-comment-data'));
-  const originalText = commentData.text;
-  
-  if(currentEditingCommentId === commentId) return;
-  
-  if(currentEditingCommentId) {
-    const prevEditForm = document.getElementById(`edit-form-${currentEditingCommentId}`);
-    if(prevEditForm) prevEditForm.remove();
-  }
-  
-  currentEditingCommentId = commentId;
-  
-  const editForm = document.createElement('div');
-  editForm.id = `edit-form-${commentId}`;
-  editForm.className = 'relife-edit-comment-form';
-  editForm.innerHTML = `
-    <textarea class="relife-edit-textarea" id="edit-textarea-${commentId}" placeholder="Nhập @username để gắn tag người khác...">${esc(originalText)}</textarea>
-    <div class="relife-edit-buttons">
-      <button class="relife-btn-save" onclick="window.saveEdit('${commentId}')">
-        <i class="bi bi-check-lg"></i> Lưu
-      </button>
-      <button class="relife-btn-cancel" onclick="window.cancelEdit('${commentId}')">
-        Hủy
-      </button>
-    </div>
-  `;
-  
-  const commentText = commentEl.querySelector('.relife-comment-text');
-  commentText.after(editForm);
-  
-  const textarea = document.getElementById(`edit-textarea-${commentId}`);
-  textarea.focus();
-  textarea.setSelectionRange(textarea.value.length, textarea.value.length);
-  
-  setupMentionAutocomplete(textarea);
-};
-
-window.cancelEdit = function(commentId) {
-  const editForm = document.getElementById(`edit-form-${commentId}`);
-  if(editForm) editForm.remove();
-  currentEditingCommentId = null;
-};
-
-window.saveEdit = async function(commentId) {
-  if(isNotification) return;
-  
-  const textarea = document.getElementById(`edit-textarea-${commentId}`);
-  const newText = textarea.value.trim();
-  
-  if(!newText) {
-    alert('Bình luận không được để trống.');
+  if(!commentEl) {
+    console.warn('Comment not found:', commentId);
     return;
   }
   
-  try {
-    const mentions = extractMentions(newText);
-    const mentionedUserIds = await resolveMentions(mentions);
+  // First, expand all parent containers if comment is hidden
+  let parentContainer = commentEl.closest('.relife-replies-container');
+  while(parentContainer) {
+    const parentCommentId = parentContainer.id.replace('replies-', '');
+    const toggleBtn = document.getElementById(`toggle-${parentCommentId}`);
     
-    await updateDoc(doc(db, 'posts', contentId, 'comments', commentId), {
-      text: newText,
-      mentions: mentionedUserIds,
-      editedAt: serverTimestamp(),
-      editCount: increment(1)
-    });
+    // Expand if collapsed
+    if(parentContainer.style.display === 'none') {
+      parentContainer.style.display = 'block';
+      if(toggleBtn) {
+        toggleBtn.innerHTML = '<i class="bi bi-chevron-up"></i><span>Ẩn phản hồi</span>';
+        toggleBtn.classList.add('expanded');
+      }
+    }
     
-    window.cancelEdit(commentId);
-    
-    console.log('Comment updated successfully');
-  } catch(err) {
-    console.error('Edit comment error:', err);
-    alert('Không thể cập nhật bình luận. Vui lòng thử lại.');
+    // Move to next parent level
+    parentContainer = parentContainer.parentElement?.closest('.relife-replies-container');
+  }
+  
+  // Scroll to comment with smooth animation
+  commentEl.scrollIntoView({ 
+    behavior: 'smooth', 
+    block: 'center' 
+  });
+  
+  // Add highlight effect
+  commentEl.classList.add('highlight');
+  
+  // Remove highlight after animation
+  setTimeout(() => {
+    commentEl.classList.remove('highlight');
+  }, 2000);
+};
+
+/**
+ * Toggle replies visibility
+ */
+window.toggleReplies = function(commentId) {
+  const repliesContainer = document.getElementById(`replies-${commentId}`);
+  const toggleBtn = document.getElementById(`toggle-${commentId}`);
+  
+  if(!repliesContainer || !toggleBtn) return;
+  
+  const isHidden = repliesContainer.style.display === 'none';
+  
+  if(isHidden) {
+    repliesContainer.style.display = 'block';
+    toggleBtn.innerHTML = '<i class="bi bi-chevron-up"></i><span>Ẩn phản hồi</span>';
+    toggleBtn.classList.add('expanded');
+  } else {
+    repliesContainer.style.display = 'none';
+    const replyCount = repliesContainer.querySelectorAll('.comment-item').length;
+    toggleBtn.innerHTML = `<i class="bi bi-chevron-down"></i><span>Xem ${replyCount} phản hồi</span>`;
+    toggleBtn.classList.remove('expanded');
   }
 };
 
 /**
- * Extract @mentions from text
+ * Set reply target
  */
-function extractMentions(text) {
-  const mentionRegex = /@(\w+)/g;
-  const mentions = [];
-  let match;
-  while((match = mentionRegex.exec(text)) !== null) {
-    mentions.push('@' + match[1]);
-  }
-  return [...new Set(mentions)];
-}
-
-/**
- * Resolve @mentions to user IDs
- */
-async function resolveMentions(mentions) {
-  if(mentions.length === 0) return [];
-  
-  const userIds = [];
-  for(const tagName of mentions) {
-    try {
-      const usersRef = collection(db, 'users');
-      const q = query(usersRef, where('tagName', '==', tagName));
-      const snapshot = await getDocs(q);
-      
-      if(!snapshot.empty) {
-        userIds.push(snapshot.docs[0].id);
-      }
-    } catch(err) {
-      console.error('Resolve mention error:', err);
-    }
+window.setReplyTo = function(commentId, displayName) {
+  const user = auth.currentUser;
+  if(!user) {
+    alert('Bạn cần đăng nhập để trả lời bình luận.');
+    return;
   }
   
-  return userIds;
-}
-
-/**
- * Setup mention autocomplete
- */
-function setupMentionAutocomplete(textarea) {
-  const dropdown = document.getElementById('mentionDropdown');
-  let currentQuery = '';
+  currentReplyTo = { id: commentId, name: displayName };
+  const indicator = document.getElementById('replyIndicator');
+  const nameEl = document.getElementById('replyToName');
+  if(indicator) indicator.style.display = 'flex';
+  if(nameEl) nameEl.textContent = `Đang trả lời ${displayName}`;
   
-  textarea.addEventListener('input', async (e) => {
-    const text = textarea.value;
-    const cursorPos = textarea.selectionStart;
-    
-    const textBeforeCursor = text.substring(0, cursorPos);
-    const lastAtPos = textBeforeCursor.lastIndexOf('@');
-    
-    if(lastAtPos === -1) {
-      dropdown.classList.remove('show');
-      return;
-    }
-    
-    const queryText = textBeforeCursor.substring(lastAtPos + 1);
-    
-    if(queryText.includes(' ')) {
-      dropdown.classList.remove('show');
-      return;
-    }
-    
-    currentQuery = queryText.toLowerCase();
-    
-    if(currentQuery.length >= 2) {
-      await searchUsersForMention(currentQuery, dropdown, textarea, lastAtPos);
-    } else {
-      dropdown.classList.remove('show');
-    }
-  });
-  
-  textarea.addEventListener('blur', () => {
-    setTimeout(() => dropdown.classList.remove('show'), 200);
-  });
-}
-
-/**
- * Search users for mention
- */
-async function searchUsersForMention(query, dropdown, textarea, atPos) {
-  try {
-    const usersRef = collection(db, 'users');
-    const snapshot = await getDocs(usersRef);
-    
-    const matches = [];
-    snapshot.forEach(doc => {
-      const data = doc.data();
-      const tagName = data.tagName || '';
-      if(tagName.toLowerCase().includes(query)) {
-        matches.push({
-          id: doc.id,
-          displayName: data.displayName,
-          tagName: data.tagName,
-          avatarUrl: data.avatarUrl
-        });
-      }
-    });
-    
-    if(matches.length === 0) {
-      dropdown.classList.remove('show');
-      return;
-    }
-    
-    dropdown.innerHTML = matches.slice(0, 5).map(user => {
-      const avatar = user.avatarUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.displayName)}&background=0D6EFD&color=fff&size=64`;
-      return `
-        <div class="relife-mention-item" data-tagname="${esc(user.tagName)}" data-userid="${user.id}">
-          <img src="${avatar}" class="relife-mention-avatar" alt="avatar">
-          <div class="relife-mention-name">${esc(user.displayName)}</div>
-          <div class="relife-mention-tag">${esc(user.tagName)}</div>
-        </div>
-      `;
-    }).join('');
-    
-    const rect = textarea.getBoundingClientRect();
-    dropdown.style.left = rect.left + 'px';
-    dropdown.style.top = (rect.bottom + 5) + 'px';
-    dropdown.style.width = Math.min(rect.width, 300) + 'px';
-    dropdown.classList.add('show');
-    
-    dropdown.querySelectorAll('.relife-mention-item').forEach(item => {
-      item.addEventListener('click', () => {
-        const tagName = item.getAttribute('data-tagname');
-        const text = textarea.value;
-        const before = text.substring(0, atPos);
-        const after = text.substring(textarea.selectionStart);
-        textarea.value = before + tagName + ' ' + after;
-        textarea.focus();
-        textarea.setSelectionRange(before.length + tagName.length + 1, before.length + tagName.length + 1);
-        dropdown.classList.remove('show');
-      });
-    });
-  } catch(err) {
-    console.error('Search users error:', err);
+  const textarea = document.getElementById('commentText');
+  if(textarea) {
+    textarea.focus();
+    textarea.scrollIntoView({ behavior: 'smooth', block: 'center' });
   }
-}
+};
 
 /**
  * Report comment
@@ -1733,3 +1811,109 @@ window.submitReport = async function() {
 };
 
 document.getElementById('reportOverlay').addEventListener('click', window.closeReportModal);
+
+/**
+ * Mention autocomplete
+ */
+function setupMentionAutocomplete(textarea) {
+  const dropdown = document.getElementById('mentionDropdown');
+  let lastAtPos = -1;
+
+  textarea.addEventListener('input', async () => {
+    const text = textarea.value;
+    const cursor = textarea.selectionStart;
+    const before = text.substring(0, cursor);
+    const atIdx = before.lastIndexOf('@');
+    
+    if(atIdx === -1) { dropdown.classList.remove('show'); return; }
+    
+    const currentQuery = before.substring(atIdx + 1).toLowerCase();
+    lastAtPos = atIdx;
+    
+    if(currentQuery.length >= 2) {
+      await searchUsersForMention(currentQuery, dropdown, textarea, lastAtPos);
+    } else {
+      dropdown.classList.remove('show');
+    }
+  });
+  
+  textarea.addEventListener('blur', () => {
+    setTimeout(() => dropdown.classList.remove('show'), 200);
+  });
+}
+
+/**
+ * Search users for mention
+ */
+async function searchUsersForMention(query, dropdown, textarea, atPos) {
+  try {
+    const usersRef = collection(db, 'users');
+    const snapshot = await getDocs(usersRef);
+    
+    const matches = [];
+    snapshot.forEach(doc => {
+      const data = doc.data();
+      const tagName = data.tagName || '';
+      if(tagName.toLowerCase().includes(query)) {
+        matches.push({
+          id: doc.id,
+          displayName: data.displayName,
+          tagName: data.tagName,
+          avatarUrl: data.avatarUrl
+        });
+      }
+    });
+    
+    if(matches.length === 0) {
+      dropdown.classList.remove('show');
+      return;
+    }
+    
+    dropdown.innerHTML = matches.slice(0, 5).map(user => {
+      const avatar = user.avatarUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.displayName)}&background=0D6EFD&color=fff&size=64`;
+      return `
+        <div class="mention-item" data-tagname="${esc(user.tagName)}" data-userid="${user.id}">
+          <img src="${avatar}" class="mention-avatar" alt="avatar">
+          <div class="mention-name">${esc(user.displayName)}</div>
+          <div class="mention-tag">${esc(user.tagName)}</div>
+        </div>
+      `;
+    }).join('');
+    
+    const rect = textarea.getBoundingClientRect();
+    dropdown.style.left = rect.left + 'px';
+    dropdown.style.top = (rect.bottom + 5) + 'px';
+    dropdown.style.width = Math.min(rect.width, 300) + 'px';
+    dropdown.classList.add('show');
+    
+    dropdown.querySelectorAll('.mention-item').forEach(item => {
+      item.addEventListener('click', () => {
+        const tagName = item.getAttribute('data-tagname');
+        const text = textarea.value;
+        const before = text.substring(0, atPos);
+        const after = text.substring(textarea.selectionStart);
+        textarea.value = before + tagName + ' ' + after;
+        textarea.focus();
+        textarea.setSelectionRange(before.length + tagName.length + 1, before.length + tagName.length + 1);
+        dropdown.classList.remove('show');
+      });
+    });
+  } catch(err) {
+    console.error('Search users error:', err);
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// Initialize
+// ─────────────────────────────────────────────────────────────
+initTitleModal();      // [#2]
+initScrollBehaviour(); // [#4]
+initFloatCommentBtn(); // [#5]
+
+// Wait for auth state before loading content so follow/reaction state is correct
+let _loaded = false;
+onAuthStateChanged(auth, () => {
+  if(_loaded) return; // only load once
+  _loaded = true;
+  load();
+});
