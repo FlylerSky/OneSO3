@@ -5,7 +5,7 @@ JavaScript (ES modules, vanilla JS)
 Firebase JavaScript SDK (modular) — v9.22.2
 Firebase Firestore (Cloud Firestore)
 Firebase Authentication
-Firestore Security Rules
+Firestore Security Rules — v6.0 (9/3/2026)
 Firestore composite indexes
 Firestore features used: serverTimestamp(), increment(), writeBatch()
 
@@ -18,13 +18,4 @@ ui-avatars.com (avatar placeholder service used in UI)
 Hosting: Vercel
 Version control / source repository: GitHub
 
-
-
-
-
-
-
-
-
-
-<p><img src="https://i.ibb.co/PvTkYN79/In-Shot-20251009-061945163.jpg"></p>
+--- Không có dependency mới kể từ profile V3.3 ---

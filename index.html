@@ -69,13 +69,18 @@
       </a>
        <a href="setAdmin.html" class="menu-grid-item" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; padding: 16px 12px; background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 12px; text-decoration: none; color: #1d1d1f; min-height: 100px; text-align: center;">
         <i style="font-size: 1.75rem;"></i>
-        <span style="font-size: 0.875rem; font-weight: 600;">Relife Conssole Admin</span>
+        <span style="font-size: 0.875rem; font-weight: 600;">Console</span>
       </a>
-       <a href="roadmap.html" class="menu-grid-item" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; padding: 16px 12px; background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 12px; text-decoration: none; color: #1d1d1f; min-height: 100px; text-align: center;">
+      
+       <a href="mailBox.html" class="menu-grid-item" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; padding: 16px 12px; background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 12px; text-decoration: none; color: #1d1d1f; min-height: 100px; text-align: center;">
+        <i style="font-size: 1.75rem;"></i>
+        <span style="font-size: 0.875rem; font-weight: 600;">Hộp thư</span>
+      </a>
+      
+     <a href="roadmap.html" class="menu-grid-item" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; padding: 16px 12px; background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 12px; text-decoration: none; color: #1d1d1f; min-height: 100px; text-align: center;">
         <i style="font-size: 1.75rem;"></i>
         <span style="font-size: 0.875rem; font-weight: 600;">Tiến trình</span>
       </a>
-
 
 
 
@@ -93,10 +98,10 @@
         <i class="bi bi-info-circle me-1"></i>Phiên bản
       </small>
       <div class="mb-1">
-        <span class="badge-trial">Relife 5 (THỬ NGHIỆM)</span>
+        <span class="badge-trial">Relife 5</span>
       </div>
       <div>
-        <span class="badge bg-secondary">relife_5.0.080226</span>
+        <span class="badge bg-secondary">r5.2.426</span>
       </div>
     </div>
   </div>
@@ -311,6 +316,10 @@
 
 <!-- Module script -->
 <script type="module" src="JS/index.js"></script>
-
+<!-- Cuối <body> -->
+<script type="module">
+  import { initMailBoxModule } from './JS/mailBox-module.js';
+  initMailBoxModule({ position: 'bottom-right' });
+</script>
 </body>
 </html>

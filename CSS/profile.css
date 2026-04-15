@@ -338,8 +338,16 @@ body {
   object-position: center;
   display: block;
   transform-origin: center center;
-  transform: scale(var(--av-scale)) translate(var(--av-tx), var(--av-ty));
+  /* fallback values ensure transform works even if CSS vars not set on parent */
+  transform: scale(var(--av-scale, 1)) translate(var(--av-tx, 0px), var(--av-ty, 0px));
   transition: transform .2s ease;
+}
+
+/* Default CSS vars on av-wrap so profile-avatar-img always has a valid context */
+.av-wrap {
+  --av-scale: 1;
+  --av-tx: 0px;
+  --av-ty: 0px;
 }
 
 /* Frame overlay — outside clip, never cropped */
@@ -1139,21 +1147,124 @@ body {
   transition: width .45s ease;
 }
 
-/* Frame reward badge */
-.achievement-frame-reward {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  background: linear-gradient(135deg, #fef9c3, #fde68a);
-  border: 1px solid #fbbf24;
-  border-radius: 999px;
-  padding: 4px 12px;
-  font-size: .78rem;
-  font-weight: 600;
-  color: #92400e;
-  margin-top: 2px;
+/* ── Achievement reward box ─────────────────────────────── */
+.achv-reward-box {
+  border-radius: 12px;
+  padding: 12px 14px;
+  margin-top: 4px;
 }
-.achievement-frame-reward img { width: 20px; height: 20px; border-radius: 50%; }
+.achv-reward-locked {
+  background: rgba(107,114,128,.07);
+  border: 1px dashed #d1d5db;
+}
+.achv-reward-unlocked {
+  background: linear-gradient(135deg, #fef9c3, #fef3c7);
+  border: 1px solid #fbbf24;
+}
+.achievement-card.hero .achv-reward-unlocked {
+  background: rgba(255,255,255,.15);
+  border-color: rgba(255,255,255,.4);
+}
+.achievement-card.hero .achv-reward-locked {
+  background: rgba(255,255,255,.08);
+  border-color: rgba(255,255,255,.2);
+}
+.achv-reward-label {
+  font-size: .72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  color: #92400e;
+  margin-bottom: 8px;
+}
+.achv-reward-locked .achv-reward-label { color: #9ca3af; }
+.achievement-card.hero .achv-reward-label { color: rgba(255,255,255,.7); }
+.achv-reward-body {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+/* Frame preview circle — 52px */
+.achv-reward-frame-preview {
+  position: relative;
+  width: 52px; height: 52px;
+  flex-shrink: 0;
+}
+.achv-reward-frame-clip {
+  width: 100%; height: 100%;
+  border-radius: 50%;
+  overflow: hidden;
+  border: 2px solid rgba(0,0,0,.08);
+  position: relative; z-index: 1;
+}
+.achv-reward-frame-clip img {
+  width: 100%; height: 100%;
+  object-fit: cover; display: block;
+}
+.achv-reward-frame-overlay {
+  position: absolute;
+  inset: -4px;
+  width: calc(100% + 8px); height: calc(100% + 8px);
+  object-fit: contain; pointer-events: none;
+  z-index: 2;
+}
+.achv-reward-no-frame {
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 50%; border: 2px dashed #d1d5db;
+  color: #9ca3af; font-size: 1.4rem;
+}
+/* Text info */
+.achv-reward-info { flex: 1; min-width: 0; }
+.achv-reward-name {
+  font-weight: 700; font-size: .88rem;
+  color: #1f2937;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.achievement-card.hero .achv-reward-name { color: #fff; }
+.achv-reward-type {
+  font-size: .72rem; color: #6b7280; margin-bottom: 5px;
+}
+.achievement-card.hero .achv-reward-type { color: rgba(255,255,255,.65); }
+.achv-reward-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+/* Status badges */
+.achv-reward-status {
+  display: inline-flex; align-items: center;
+  font-size: .72rem; font-weight: 600;
+  border-radius: 999px; padding: 2px 8px;
+}
+.achv-reward-status.unlocked {
+  background: #d1fae5; color: #065f46;
+}
+.achv-reward-status.locked {
+  background: #f3f4f6; color: #6b7280;
+}
+.achievement-card.hero .achv-reward-status.unlocked {
+  background: rgba(255,255,255,.25); color: #fff;
+}
+.achievement-card.hero .achv-reward-status.locked {
+  background: rgba(255,255,255,.1); color: rgba(255,255,255,.65);
+}
+/* Equip button */
+.achv-equip-btn {
+  display: inline-flex; align-items: center;
+  font-size: .72rem; font-weight: 700;
+  background: #f59e0b; color: #fff;
+  border: none; border-radius: 999px;
+  padding: 3px 10px; cursor: pointer;
+  transition: background .15s, transform .1s;
+}
+.achv-equip-btn:hover:not(:disabled) {
+  background: #d97706; transform: scale(1.04);
+}
+.achv-equip-btn:disabled { opacity: .7; cursor: default; }
+.achievement-card.hero .achv-equip-btn {
+  background: rgba(255,255,255,.9); color: #1f2937;
+}
+
+/* Keep old badge alias for any leftover markup */
+.achievement-frame-reward {
+  display: none; /* replaced by achv-reward-box */
+}
 
 /* FIX 3: Unlocked badge (replaces locked state once achieved) */
 .achievement-unlocked-badge {
@@ -1231,9 +1342,28 @@ body {
 }
 
 /* Thumb */
-.frame-thumb-wrapper { position: relative; width: 64px; height: 64px; margin: 0 auto 8px; }
-.frame-thumb-avatar  { width: 64px; height: 64px; border-radius: 50%; object-fit: cover; }
-.frame-thumb-overlay { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; pointer-events: none; }
+.frame-thumb-wrapper {
+  position: relative;
+  width: 64px; height: 64px;
+  margin: 0 auto 8px;
+  /* NO overflow:hidden on outer — frame img bleeds */
+}
+/* Inner circle clip for avatar only */
+.frame-thumb-clip {
+  width: 100%; height: 100%;
+  border-radius: 50%;
+  overflow: hidden;
+  position: relative;
+  z-index: 1;
+}
+.frame-thumb-avatar { width: 100%; height: 100%; object-fit: cover; display: block; }
+.frame-thumb-overlay {
+  position: absolute;
+  inset: -3px; /* bleed outside circle */
+  width: calc(100% + 6px); height: calc(100% + 6px);
+  object-fit: contain; pointer-events: none;
+  z-index: 2;
+}
 
 .frame-card-name {
   font-size: .78rem;
@@ -1268,16 +1398,31 @@ body {
 }
 
 /* Preview in frame modal */
-.frame-preview-wrapper { position: relative; width: 100px; height: 100px; }
-.frame-preview-wrapper img.frame-preview-av {
+.frame-preview-wrapper {
+  position: relative;
   width: 100px; height: 100px;
-  border-radius: 50%; object-fit: cover;
+  /* NO overflow:hidden — frame img bleeds outside circle */
+}
+/* Inner clip — circles the avatar only */
+.frame-preview-clip {
+  width: 100%; height: 100%;
+  border-radius: 50%;
+  overflow: hidden;
   border: 3px solid #dee2e6;
+  position: relative;
+  z-index: 1;
+}
+.frame-preview-wrapper img.frame-preview-av {
+  /* img clips to circle via wrapper — transform driven by CSS vars */
+  width: 100%; height: 100%;
+  object-fit: cover; display: block;
 }
 .frame-preview-wrapper img.frame-preview-fr {
-  position: absolute; inset: 0;
-  width: 100%; height: 100%;
-  object-fit: cover; pointer-events: none;
+  position: absolute;
+  inset: -4px; /* bleed outside circle, same as profile-avatar-frame */
+  width: calc(100% + 8px); height: calc(100% + 8px);
+  object-fit: contain; pointer-events: none;
+  z-index: 2;
 }
 
 /* ═══════════════════════════════════════════════════════════
@@ -1321,7 +1466,7 @@ body {
   width: 100%; height: 100%;
   object-fit: cover; display: block;
   transform-origin: center center;
-  transform: scale(var(--av-scale)) translate(var(--av-tx), var(--av-ty));
+  transform: scale(var(--av-scale, 1)) translate(var(--av-tx, 0px), var(--av-ty, 0px));
   transition: transform .15s ease;
 }
 .av-preview-frame {

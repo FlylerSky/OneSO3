@@ -1,0 +1,9 @@
+{
+  "name": "relife-mailbox-api",
+  "version": "1.0.0",
+  "description": "Relife MailBox — Vercel Serverless Functions",
+  "engines": { "node": "22.x" },
+  "dependencies": {
+    "firebase-admin": "^11.11.1"
+  }
+}

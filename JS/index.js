@@ -17,6 +17,7 @@ import {
   doc, updateDoc, increment, getDocs, getDoc, where, setDoc, writeBatch, deleteDoc
 } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore.js";
 
+
 // Initialize
 const db = initFirebase();
 const auth = getAuth();

@@ -1,0 +1,322 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Relife — Hộp Thư</title>
+
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+  <link href="CSS/mailBox.css" rel="stylesheet">
+</head>
+<body>
+
+<!-- Animated Background -->
+<div class="relife-bg">
+  <div class="relife-gradient"></div>
+  <div class="relife-orb relife-orb-1"></div>
+  <div class="relife-orb relife-orb-2"></div>
+  <div class="relife-orb relife-orb-3"></div>
+</div>
+
+<!-- Page Loading Overlay -->
+<div id="pageLoadingOverlay" class="page-loading-overlay">
+  <div class="loading-spinner"></div>
+  <div class="loading-text">Đang tải hộp thư...</div>
+</div>
+
+<!-- Navbar -->
+<nav class="navbar bg-white shadow-sm py-2">
+  <div class="container d-flex align-items-center justify-content-between">
+    <div class="d-flex align-items-center gap-3">
+      <button class="btn btn-light btn-sm" data-bs-toggle="offcanvas" data-bs-target="#menuCanvas">
+        <i class="bi bi-list fs-4"></i>
+      </button>
+      <a href="index.html" class="fw-bold text-decoration-none text-dark" style="font-size:1.2rem;">Relife</a>
+    </div>
+    <div class="mailbox-nav-title">
+      <i class="bi bi-envelope-fill me-2"></i>Hộp Thư
+    </div>
+    <!-- Nút soạn thư (chỉ hiện với SA) -->
+    <button id="composeBtn" class="btn btn-primary btn-sm d-none" style="border-radius:999px;padding:6px 16px;">
+      <i class="bi bi-pencil-fill me-1"></i>Soạn thư
+    </button>
+    <div id="navPlaceholder" style="width:80px;"></div>
+  </div>
+</nav>
+
+<!-- Offcanvas Menu -->
+<div class="offcanvas offcanvas-start" tabindex="-1" id="menuCanvas">
+  <div class="offcanvas-header">
+    <h5 class="offcanvas-title"><i class="bi bi-list me-2"></i>Menu</h5>
+    <button class="btn-close" data-bs-dismiss="offcanvas"></button>
+  </div>
+  <div class="offcanvas-body">
+    <div id="menuAuthArea" class="mb-3"></div>
+    <hr>
+    <div class="menu-grid" style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px;max-height:320px;overflow-y:auto;padding:4px;margin-bottom:1rem;">
+      <a href="index.html" class="menu-grid-item">
+        <i class="bi bi-house-fill"></i><span>Trang chủ</span>
+      </a>
+      <a href="follow.html" class="menu-grid-item">
+        <i class="bi bi-people-fill"></i><span>Theo dõi</span>
+      </a>
+      <a href="notification.html" class="menu-grid-item">
+        <i class="bi bi-bell-fill"></i><span>Thông báo</span>
+      </a>
+      <a href="mailBox.html" class="menu-grid-item active">
+        <i class="bi bi-envelope-fill"></i><span>Hộp Thư</span>
+      </a>
+    </div>
+    <hr>
+    <div class="small text-muted text-center">Phiên bản: <span style="font-size:.75rem;background:#e9ecef;padding:2px 8px;border-radius:999px;">V5.1 ©Relife MDA</span></div>
+  </div>
+</div>
+
+<!-- Main Content -->
+<div class="container container-main" id="mainContent" style="display:none;">
+
+  <!-- Header Card -->
+  <div class="mailbox-header-card">
+    <div class="mailbox-header-icon">
+      <i class="bi bi-envelope-paper-fill"></i>
+    </div>
+    <div class="mailbox-header-info">
+      <h4 class="mb-0">Hộp Thư</h4>
+      <div class="mailbox-header-sub" id="userRoleLabel">Đang tải...</div>
+    </div>
+    <div class="mailbox-unread-badge" id="unreadBadge" style="display:none;">
+      <span id="unreadCount">0</span> chưa đọc
+    </div>
+  </div>
+
+  <!-- Tab Bar -->
+  <div class="mailbox-tab-bar">
+    <button class="mailbox-tab active" id="tabServer" data-tab="server">
+      <i class="bi bi-globe2"></i>
+      <span>Thư toàn server</span>
+      <span class="mailbox-tab-badge" id="badgeServer">0</span>
+    </button>
+    <button class="mailbox-tab" id="tabMine" data-tab="mine">
+      <i class="bi bi-inbox-fill"></i>
+      <span>Thư của tôi</span>
+      <span class="mailbox-tab-badge" id="badgeMine">0</span>
+    </button>
+  </div>
+
+  <!-- ═══════════════ TAB: THƯ TOÀN SERVER ═══════════════ -->
+  <div class="mailbox-panel" id="panelServer">
+    <!-- SA: Compose button area -->
+    <div id="saComposeArea" class="sa-compose-hint d-none">
+      <i class="bi bi-megaphone-fill me-2"></i>
+      Bạn có quyền gửi thư thông báo tới toàn bộ người dùng.
+      <button class="btn btn-sm btn-primary ms-3" id="composeServerBtn" style="border-radius:999px;">
+        <i class="bi bi-send-fill me-1"></i>Gửi thông báo
+      </button>
+    </div>
+
+    <!-- List -->
+    <div id="serverMailList" class="mail-list">
+      <div class="mail-empty" id="serverEmpty" style="display:none;">
+        <i class="bi bi-envelope-open"></i>
+        <p>Chưa có thư toàn server nào</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════ TAB: THƯ CỦA TÔI ═══════════════ -->
+  <div class="mailbox-panel" id="panelMine" style="display:none;">
+
+    <!-- Compose hint cho RA/LLA -->
+    <div id="userComposeArea" class="user-compose-hint d-none">
+      <i class="bi bi-pen-fill me-2"></i>
+      Bạn có thể gửi thư tới Tài khoản Bậc cao (SA).
+      <button class="btn btn-sm btn-outline-primary ms-3" id="composeDMBtn" style="border-radius:999px;">
+        <i class="bi bi-pencil me-1"></i>Viết thư
+      </button>
+    </div>
+
+    <!-- Sub-tabs: Inbox / Sent -->
+    <div class="mine-subtabs">
+      <button class="mine-subtab active" id="subInbox" data-sub="inbox">
+        <i class="bi bi-tray-fill"></i> Hộp thư đến
+      </button>
+      <button class="mine-subtab" id="subSent" data-sub="sent">
+        <i class="bi bi-send-fill"></i> Đã gửi
+      </button>
+    </div>
+
+    <!-- Inbox List -->
+    <div id="inboxList" class="mail-list">
+      <div class="mail-empty" id="inboxEmpty" style="display:none;">
+        <i class="bi bi-tray"></i>
+        <p>Hộp thư đến trống</p>
+      </div>
+    </div>
+
+    <!-- Sent List -->
+    <div id="sentList" class="mail-list" style="display:none;">
+      <div class="mail-empty" id="sentEmpty" style="display:none;">
+        <i class="bi bi-send"></i>
+        <p>Chưa gửi thư nào</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Login prompt -->
+  <div id="loginPrompt" class="login-prompt" style="display:none;">
+    <i class="bi bi-lock-fill"></i>
+    <h5>Vui lòng đăng nhập</h5>
+    <p>Bạn cần đăng nhập để xem hộp thư.</p>
+    <a href="index.html" class="btn btn-primary" style="border-radius:999px;">
+      <i class="bi bi-house me-2"></i>Về trang chủ để đăng nhập
+    </a>
+  </div>
+
+</div>
+
+<!-- ═══════════ MODAL: ĐỌC THƯ ═══════════ -->
+<div class="modal fade" id="readMailModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content mail-modal-content">
+      <div class="modal-header mail-modal-header">
+        <div class="d-flex align-items-center gap-3 w-100">
+          <div class="mail-modal-icon" id="readMailIcon">
+            <i class="bi bi-envelope-open-fill"></i>
+          </div>
+          <div style="flex:1;min-width:0;">
+            <h5 class="modal-title mb-0 text-truncate" id="readMailSubject">—</h5>
+            <div class="mail-modal-meta" id="readMailMeta">—</div>
+          </div>
+        </div>
+        <button type="button" class="btn-close ms-2" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body mail-modal-body" id="readMailBody">
+        <div class="mail-body-content" id="readMailContent"></div>
+      </div>
+      <div class="modal-footer mail-modal-footer" id="readMailFooter">
+        <!-- Reply btn nếu là thư riêng -->
+        <button class="btn btn-outline-primary btn-sm" id="replyBtn" style="border-radius:999px;display:none;">
+          <i class="bi bi-reply-fill me-1"></i>Trả lời
+        </button>
+        <!-- Delete (SA: server mail; owner: own DM) -->
+        <button class="btn btn-outline-danger btn-sm" id="deleteMailBtn" style="border-radius:999px;display:none;">
+          <i class="bi bi-trash3 me-1"></i>Xóa
+        </button>
+        <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal" style="border-radius:999px;">Đóng</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════ MODAL: SOẠN THƯ ═══════════ -->
+<div class="modal fade" id="composeModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content mail-modal-content">
+      <div class="modal-header mail-modal-header">
+        <div class="d-flex align-items-center gap-2">
+          <div class="mail-modal-icon compose-icon">
+            <i class="bi bi-pencil-fill"></i>
+          </div>
+          <h5 class="modal-title mb-0" id="composeModalTitle">Soạn thư</h5>
+        </div>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <!-- Loại thư -->
+        <div id="mailTypeSelector" class="mail-type-selector mb-3">
+          <button class="mail-type-btn active" data-type="server" id="btnTypeServer">
+            <i class="bi bi-globe2"></i>
+            <div>
+              <div class="fw-semibold">Thư toàn server</div>
+              <div class="small text-muted">Gửi đến tất cả người dùng</div>
+            </div>
+          </button>
+          <button class="mail-type-btn" data-type="dm" id="btnTypeDM">
+            <i class="bi bi-person-fill"></i>
+            <div>
+              <div class="fw-semibold">Thư riêng</div>
+              <div class="small text-muted">Gửi đến một người cụ thể</div>
+            </div>
+          </button>
+        </div>
+
+        <!-- Người nhận (DM) -->
+        <div id="recipientArea" style="display:none;" class="mb-3">
+          <label class="form-label fw-semibold">
+            <i class="bi bi-people me-1"></i>Người nhận
+            <span class="recipient-count-hint text-muted fw-normal" id="recipientCountHint"></span>
+          </label>
+          <div class="recipient-search-box">
+            <i class="bi bi-search"></i>
+            <input type="text" id="recipientInput" class="form-control form-control-sm border-0"
+              placeholder="Tìm theo tên hoặc @tag...">
+          </div>
+          <div id="recipientResults" class="recipient-results"></div>
+          <!-- Multi-recipient chips -->
+          <div id="selectedRecipientsList" class="selected-recipients-list d-none"></div>
+        </div>
+
+        <!-- Tiêu đề -->
+        <div class="mb-3">
+          <label class="form-label fw-semibold">
+            <i class="bi bi-card-heading me-1"></i>Tiêu đề
+          </label>
+          <input type="text" id="mailSubject" class="form-control"
+            placeholder="Nhập tiêu đề thư..." maxlength="120">
+          <div class="text-muted small mt-1" id="subjectCount">0/120</div>
+        </div>
+
+        <!-- Nội dung -->
+        <div class="mb-3">
+          <label class="form-label fw-semibold">
+            <i class="bi bi-body-text me-1"></i>Nội dung
+          </label>
+          <textarea id="mailBody" class="form-control mail-textarea"
+            placeholder="Viết nội dung thư..." rows="6" maxlength="2000"></textarea>
+          <div class="text-muted small mt-1" id="bodyCount">0/2000</div>
+        </div>
+
+        <!-- Priority (chỉ SA soạn thư server) -->
+        <div id="priorityArea" class="mb-2">
+          <label class="form-label fw-semibold">
+            <i class="bi bi-flag me-1"></i>Mức độ ưu tiên
+          </label>
+          <div class="priority-selector">
+            <label class="priority-opt">
+              <input type="radio" name="priority" value="normal" checked>
+              <span><i class="bi bi-circle text-secondary"></i> Thông thường</span>
+            </label>
+            <label class="priority-opt">
+              <input type="radio" name="priority" value="important">
+              <span><i class="bi bi-exclamation-circle text-warning"></i> Quan trọng</span>
+            </label>
+            <label class="priority-opt">
+              <input type="radio" name="priority" value="urgent">
+              <span><i class="bi bi-exclamation-triangle-fill text-danger"></i> Khẩn cấp</span>
+            </label>
+          </div>
+        </div>
+
+        <div id="composeError" class="alert alert-danger d-none py-2 small"></div>
+      </div>
+      <div class="modal-footer mail-modal-footer">
+        <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal" style="border-radius:999px;">Hủy</button>
+        <button type="button" class="btn btn-primary btn-sm" id="sendMailBtn" style="border-radius:999px;">
+          <i class="bi bi-send-fill me-1"></i>Gửi thư
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════ TOAST ═══════════ -->
+<div class="mail-toast" id="mailToast">
+  <i class="bi bi-check-circle-fill me-2"></i>
+  <span id="mailToastMsg">Thành công!</span>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script type="module" src="JS/mailBox.js"></script>
+</body>
+</html>

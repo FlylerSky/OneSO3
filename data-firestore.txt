@@ -1,5 +1,5 @@
 Cấu trúc Firestore: 
-Cập nhật 6/3/2026 [r5.0.426]
+Cập nhật 9/3/2026 [r5.2.426 — profile V5]
 
 🔥 friendsmda-d3e5d [PROJECT]
 │
@@ -40,9 +40,13 @@ Cập nhật 6/3/2026 [r5.0.426]
 │       ├── achievements: map
 │       │   └── companionship: map
 │       ├── activated: boolean
-│       ├── avatarFrame: string
+│       ├── avatarFrame: string          (frameId từ avatar_frames_data.js, vd: 'none', 'gold_star')
+│       ├── avatarSettings: map          (★ MỚI — crop/transform cho avatar)
+│       │   ├── scale: number            (0–200, default 100)
+│       │   ├── translateX: number       (px)
+│       │   └── translateY: number       (px)
 │       ├── avatarUrl: string | null
-│       ├── bio: string
+│       ├── bio: string                  (HTML string từ Quill editor)
 │       ├── birthday: string
 │       ├── country: string | null
 │       ├── coverPhotoSettings: map
@@ -55,8 +59,16 @@ Cập nhật 6/3/2026 [r5.0.426]
 │       ├── email: string
 │       ├── fullName: string
 │       ├── gender: string | null
+│       ├── labels: array | null         (★ MỚI — badge labels bổ sung, vd: ['vip','contributor'])
+│       ├── socialLinks: map | null      (★ MỚI — mạng xã hội)
+│       │   ├── facebook: string | null
+│       │   ├── instagram: string | null
+│       │   ├── tiktok: string | null
+│       │   ├── youtube: string | null
+│       │   ├── github: string | null
+│       │   └── website: string | null
 │       ├── tagName: string
-│       ├── type: string              (vd: "admin" — chỉ có ở một số tài khoản)
+│       ├── type: string                 (vd: "admin","moderator","vip","contributor","verified" — chỉ admin set)
 │       ├── updatedAt: timestamp
 │       │
 │       ├── 📂 followers/ [SUBCOLLECTION]
@@ -88,27 +100,28 @@ Cập nhật 6/3/2026 [r5.0.426]
 │
 ├── 📁 posts/ [COLLECTION]
 │   └── 📄 {postId} [DOCUMENT]
-│       ├── authorTag: string
+│       ├── authorTag: string            (⚠ legacy — runtime đọc từ users/{userId} qua _userCache)
 │       ├── commentsCount: number
-│       ├── content: string           (HTML string từ Quill editor)
+│       ├── content: string              (HTML string từ Quill editor)
 │       ├── createdAt: timestamp
 │       ├── dislikes: number
-│       ├── displayName: string
+│       ├── displayName: string          (⚠ legacy — runtime đọc từ users/{userId} qua _userCache)
 │       ├── hashtags: array
 │       ├── likes: number
 │       ├── title: string
-│       ├── updatedAt: timestamp      (optional)
+│       ├── updatedAt: timestamp         (optional)
 │       ├── userId: string
 │       │
 │       ├── 📂 comments/ [SUBCOLLECTION]
 │       │   └── 📄 {commentId} [DOCUMENT]
 │       │       ├── createdAt: timestamp
-│       │       ├── displayName: string
-│       │       ├── editCount: number  (optional)
-│       │       ├── editedAt: timestamp (optional)
+│       │       ├── displayName: string  (⚠ legacy — runtime đọc từ users/{userId} qua _userCache)
+│       │       ├── avatarUrl: string    (⚠ legacy — runtime đọc từ users/{userId} qua _userCache)
+│       │       ├── editCount: number    (optional)
+│       │       ├── editedAt: timestamp  (optional)
 │       │       ├── mentions: array
-│       │       ├── replyTo: string    (optional — commentId được reply)
-│       │       ├── replyToName: string (optional)
+│       │       ├── replyTo: string      (optional — commentId được reply)
+│       │       ├── replyToName: string  (optional)
 │       │       ├── reportCount: number
 │       │       ├── text: string
 │       │       ├── userId: string
@@ -122,22 +135,33 @@ Cập nhật 6/3/2026 [r5.0.426]
 │       └── 📂 likes/ [SUBCOLLECTION]
 │           └── 📄 {userId} [DOCUMENT]
 │               ├── createdAt: timestamp
-│               ├── type: string       ("like" | "dislike")
+│               ├── type: string         ("like" | "dislike")
 │               └── userId: string
 │
 ├── 📁 roadmap_leaks/ [COLLECTION]
 │   └── 📄 {leakId} [DOCUMENT]
 │       ├── authorUid: string
-│       ├── content: string           (HTML string)
+│       ├── content: string              (HTML string)
 │       ├── createdAt: timestamp
-│       ├── level: string             ("hint" | "major" | ...)
+│       ├── level: string               ("hint" | "major" | ...)
 │       ├── title: string
 │       └── version: string
 │
 └── 📁 notifications/ [COLLECTION]
     └── 📄 {notificationId} [DOCUMENT]
-        ├── category: string          (vd: "feature")
-        ├── content: string           (HTML string)
+        ├── category: string             (vd: "feature")
+        ├── content: string              (HTML string)
         ├── createdAt: timestamp
-        ├── priority: string          ("high" | "medium" | "low")
+        ├── priority: string             ("high" | "medium" | "low")
         └── title: string
+
+─────────────────────────────────────────────────────────────
+⚠ GHI CHÚ QUAN TRỌNG — Legacy display fields
+─────────────────────────────────────────────────────────────
+Các field displayName / avatarUrl / authorTag được lưu trong posts và comments
+là dữ liệu legacy. Từ profile V3.3 trở đi:
+  • Runtime KHÔNG đọc từ post.displayName hay comment.displayName để hiển thị
+  • Tất cả render đọc từ _userCache (in-memory, fetch từ users/{userId})
+  • propagateProfileToComments() vẫn ghi đè các field này khi user đổi tên
+    (để index.js và các trang khác chưa migrate vẫn hoạt động)
+  • Nút "Ép chuyển đổi" trong edit profile → đồng bộ ngay lập tức toàn bộ

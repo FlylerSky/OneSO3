@@ -1,4 +1,4 @@
-//rules_r.0.5.3y [Rules 5.4] — account tier management
+//rules_r.0.5.4y [Rules 5.5] — account tier management
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -280,6 +280,84 @@ service cloud.firestore {
       allow read: if true;
       allow write: if isAdmin();
     }
+// 📨 MAILBOX SERVER — Thư toàn server
+// Mọi user đã đăng nhập đều đọc được.
+// Chỉ SA (admin/dev/operator/moderator) mới tạo/xóa được.
+// Vercel API xử lý write → client không cần write thẳng vào Firestore.
+// Rules này là lớp bảo vệ thứ 2 phòng trường hợp bypass API.
+match /mailbox_server/{mailId} {
+  // Đọc: bất kỳ user nào đã đăng nhập
+  allow read: if request.auth != null;
+
+  // Tạo: chỉ SA (kiểm tra qua Firestore get)
+  allow create: if request.auth != null
+    && callerType() in saTypes()
+    && request.resource.data.senderUid == request.auth.uid
+    && request.resource.data.subject   is string
+    && request.resource.data.body      is string
+    && request.resource.data.subject.size() <= 120
+    && request.resource.data.body.size()    <= 2000
+    && request.resource.data.type == 'server'
+    && request.resource.data.priority in ['normal', 'important', 'urgent'];
+
+  // Update: không ai được update (thư bất biến)
+  allow update: if false;
+
+  // Xóa: chỉ SA
+  allow delete: if request.auth != null && callerType() in saTypes();
+}
+
+// 📩 MAILBOX DM — Thư riêng
+// Chỉ người gửi và người nhận mới đọc được.
+// Tạo: chỉ khi senderUid == auth.uid.
+// Xóa: SA, người gửi, hoặc người nhận.
+match /mailbox_dm/{mailId} {
+  // Đọc: người gửi hoặc người nhận
+  allow read: if request.auth != null
+    && (resource.data.senderUid    == request.auth.uid
+     || resource.data.recipientUid == request.auth.uid);
+
+  // Tạo: senderUid phải là chính mình, các field bắt buộc phải hợp lệ
+  allow create: if request.auth != null
+    && request.resource.data.senderUid == request.auth.uid
+    && request.resource.data.subject   is string
+    && request.resource.data.body      is string
+    && request.resource.data.subject.size() <= 120
+    && request.resource.data.body.size()    <= 2000
+    && request.resource.data.type == 'dm'
+    && request.resource.data.priority in ['normal', 'important', 'urgent']
+    && request.resource.data.recipientUid is string
+    && request.resource.data.recipientUid != request.auth.uid;
+
+  // Update: chỉ người nhận được update field 'read' và 'readAt'
+  allow update: if request.auth != null
+    && resource.data.recipientUid == request.auth.uid
+    && request.resource.data.diff(resource.data).changedKeys().hasOnly(['read', 'readAt'])
+    && request.resource.data.read == true;
+
+  // Xóa: SA hoặc người gửi hoặc người nhận
+  allow delete: if request.auth != null
+    && (callerType() in saTypes()
+     || resource.data.senderUid    == request.auth.uid
+     || resource.data.recipientUid == request.auth.uid);
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// COMPOSITE INDEXES CẦN TẠO (Firebase Console → Firestore → Indexes)
+// ══════════════════════════════════════════════════════════════════════════════
+//
+// Collection: mailbox_server
+//   Fields: senderUid ASC, createdAt DESC    → (cho sent list của SA)
+//   Fields: createdAt DESC                   → (cho server list tất cả)
+//
+// Collection: mailbox_dm
+//   Fields: recipientUid ASC, createdAt DESC → (cho inbox)
+//   Fields: senderUid ASC,    createdAt DESC → (cho sent)
+//   Fields: senderUid ASC, createdAt ASC     → (cho rate limiting count)
+//
+// Nếu Firebase báo lỗi "The query requires an index", nhấn vào link trong
+// error message để tự động tạo index.
+
 
   }
 }

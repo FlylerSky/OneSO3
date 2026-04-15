@@ -167,27 +167,6 @@ function avatarTransformVars(settings) {
   return `--av-scale:${sc};--av-tx:${tx}px;--av-ty:${ty}px;`;
 }
 
-// Build a self-contained avatar circle with frame + crop transform
-// size: pixel size (e.g. 40). profile: userDoc-like object.
-// Returns HTML string of a relative-positioned wrapper div.
-function buildAvatarHtml(profile, size = 40, extraStyle = '') {
-  if (!profile) profile = {};
-  const src     = getAvatarUrl(profile, profile.displayName);
-  const frameObj= getFrameById(profile.avatarFrame);
-  const sc  = (profile.avatarSettings?.scale      ?? 100) / 100;
-  const tx  =  profile.avatarSettings?.translateX ?? 0;
-  const ty  =  profile.avatarSettings?.translateY ?? 0;
-  const transform = `scale(${sc}) translate(${tx}px,${ty}px)`;
-  const outer = size + 4; // frame bleed
-  const frameHtml = frameObj?.image
-    ? `<img src="${esc(frameObj.image)}" style="position:absolute;inset:-2px;width:${outer}px;height:${outer}px;object-fit:cover;pointer-events:none;z-index:1;" alt="">`
-    : '';
-  return `<div style="position:relative;width:${size}px;height:${size}px;flex-shrink:0;overflow:hidden;border-radius:50%;${extraStyle}">` +
-         `<img src="${esc(src)}" style="width:100%;height:100%;object-fit:cover;display:block;transform-origin:center;transform:${transform};" alt="avatar">` +
-         `</div>` +
-         (frameObj?.image ? `<img src="${esc(frameObj.image)}" style="position:absolute;inset:-2px;width:${outer}px;height:${outer}px;object-fit:cover;pointer-events:none;z-index:1;" alt="">` : '');
-}
-
 // Build avatar circle with frame + crop transform.
 // Structure:
 //   outer div (relative, no overflow:hidden — needed so frame bleed isn't clipped)
@@ -196,23 +175,24 @@ function buildAvatarHtml(profile, size = 40, extraStyle = '') {
 //     frame img (absolute, inset:-2px — OUTSIDE clip so it never gets cut)
 function buildAvatarWrap(profile, size = 40, clickUid = null) {
   if (!profile) profile = {};
-  const src     = getAvatarUrl(profile, profile.displayName);
-  const frameObj= getFrameById(profile.avatarFrame);
-  const sc  = (profile.avatarSettings?.scale      ?? 100) / 100;
-  const tx  =  profile.avatarSettings?.translateX ?? 0;
-  const ty  =  profile.avatarSettings?.translateY ?? 0;
-  const transform = `scale(${sc}) translate(${tx}px,${ty}px)`;
-  const bleed = 3; // px frame extends beyond circle
-  const outer = size + bleed * 2;
+  const src      = getAvatarUrl(profile, profile.displayName);
+  const frameObj = getFrameById(profile.avatarFrame);
+  const sc   = (profile.avatarSettings?.scale      ?? 100) / 100;
+  // translateX/Y stored in px relative to 100px preview — scale proportionally for every size
+  const ratio = size / 100;
+  const tx   = (profile.avatarSettings?.translateX ?? 0) * ratio;
+  const ty   = (profile.avatarSettings?.translateY ?? 0) * ratio;
+  const avVars = `--av-scale:${sc};--av-tx:${tx}px;--av-ty:${ty}px;`;
+  const bleed  = 3;
+  const outer  = size + bleed * 2;
+  // object-fit:contain so SVG frame border is never cropped
   const frameHtml = frameObj?.image
-    ? `<img src="${esc(frameObj.image)}" style="position:absolute;inset:-${bleed}px;width:${outer}px;height:${outer}px;object-fit:cover;pointer-events:none;z-index:2;" alt="">`
+    ? `<img src="${esc(frameObj.image)}" style="position:absolute;inset:-${bleed}px;width:${outer}px;height:${outer}px;object-fit:contain;pointer-events:none;z-index:2;" alt="">`
     : '';
   const clickAttr = clickUid ? `onclick="window.navigateToProfile('${esc(clickUid)}')" ` : '';
-  // outer: relative, NO overflow hidden — lets frame bleed out
-  // clip:  the circle crop (overflow:hidden here, NOT on outer)
-  return `<div class="av-wrap" ${clickAttr}style="position:relative;width:${size}px;height:${size}px;flex-shrink:0;${clickUid ? 'cursor:pointer;' : ''}">` +
+  return `<div class="av-wrap" ${clickAttr}style="${avVars}position:relative;width:${size}px;height:${size}px;flex-shrink:0;${clickUid ? 'cursor:pointer;' : ''}">` +
            `<div style="width:${size}px;height:${size}px;border-radius:50%;overflow:hidden;position:relative;z-index:1;">` +
-             `<img src="${esc(src)}" style="width:100%;height:100%;object-fit:cover;display:block;transform-origin:center;transform:${transform};" alt="avatar">` +
+             `<img src="${esc(src)}" class="profile-avatar-img" style="width:100%;height:100%;" alt="avatar">` +
            `</div>` +
            frameHtml +
          `</div>`;
@@ -255,6 +235,10 @@ function getAllFramesList() {
 }
 function getFrameById(id) {
   return getAllFramesList().find(f => f.id === id) || null;
+}
+
+function getFrameByRequirement(reqKey) {
+  return getAllFramesList().find(f => f.requirement === reqKey) || null;
 }
 
 // ─── FIX 3: Frame unlock based on elapsed time ───────────
@@ -1676,19 +1660,51 @@ function renderCompanionshipDetail() {
       subtitle = completed ? 'Hoàn thành!' : `${Math.round(pct)}% đạt mốc ${ms.label}`;
     }
 
-    // FIX 3: frame reward badge + unlocked glow
+    // Build reward box
     let frameRewardHtml = '';
     if (ms.frameReq) {
-      const rf = getFrameById(ms.frameReq);
+      const rf = getFrameByRequirement(ms.frameReq); // frameReq is requirement key, not frame id
       if (rf) {
-        // FIX 3: check unlock using elapsed time directly
         const unlocked = isFrameUnlocked(rf, createdAt);
+        if (unlocked) colDiv.classList.add('unlocked-glow');
+
+        // Preview: small avatar circle + frame overlay (48px)
+        const previewAvatarSrc = getAvatarUrl(userDoc || {}, (userDoc || {}).displayName);
+        const framePreviewHtml = rf.image
+          ? `<div class="achv-reward-frame-preview">
+               <div class="achv-reward-frame-clip">
+                 <img src="${esc(previewAvatarSrc)}" alt="avatar">
+               </div>
+               <img class="achv-reward-frame-overlay" src="${esc(rf.image)}" alt="">
+             </div>`
+          : `<div class="achv-reward-frame-preview achv-reward-no-frame">
+               <i class="bi bi-circle-square"></i>
+             </div>`;
+
+        const equipBtn = (unlocked && isOwner)
+          ? `<button class="achv-equip-btn" data-frame-id="${esc(rf.id)}" title="Trang bị khung này">
+               <i class="bi bi-check2-circle me-1"></i>Trang bị
+             </button>`
+          : '';
+
+        const statusHtml = unlocked
+          ? `<span class="achv-reward-status unlocked"><i class="bi bi-unlock-fill me-1"></i>Đã mở khóa</span>${equipBtn}`
+          : `<span class="achv-reward-status locked"><i class="bi bi-lock-fill me-1"></i>Hoàn thành mốc để mở</span>`;
+
         frameRewardHtml = `
-          <div class="achievement-frame-reward">
-            ${rf.image ? `<img src="${esc(rf.image)}" alt="">` : '<i class="bi bi-circle-square"></i>'}
-            <span>${unlocked ? '🔓' : '🔒'} Khung: ${esc(rf.name)}</span>
+          <div class="achv-reward-box ${unlocked ? 'achv-reward-unlocked' : 'achv-reward-locked'}">
+            <div class="achv-reward-label">
+              <i class="bi bi-gift-fill me-1"></i>Phần thưởng
+            </div>
+            <div class="achv-reward-body">
+              ${framePreviewHtml}
+              <div class="achv-reward-info">
+                <div class="achv-reward-name">${esc(rf.name)}</div>
+                <div class="achv-reward-type">Khung avatar</div>
+                <div class="achv-reward-actions">${statusHtml}</div>
+              </div>
+            </div>
           </div>`;
-        if (unlocked) colDiv.classList.add('unlocked-glow');  // visual cue
       }
     }
 
@@ -1700,7 +1716,6 @@ function renderCompanionshipDetail() {
 
     const inner = document.createElement('div');
     inner.className = 'achievement-card' + (ms.style ? ' ' + ms.style : '');
-    // FIX 3: add unlocked-glow class to the card itself too
     if (completed && ms.frameReq) inner.classList.add('unlocked-glow');
 
     inner.innerHTML = `
@@ -1719,6 +1734,32 @@ function renderCompanionshipDetail() {
     colDiv.appendChild(inner);
     container.appendChild(colDiv);
   });
+
+  // Wire "Trang bị" buttons via event delegation
+  container.addEventListener('click', async e => {
+    const btn = e.target.closest('.achv-equip-btn');
+    if (!btn || !currentUser || !isOwner) return;
+    const frameId = btn.dataset.frameId;
+    if (!frameId) return;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+    try {
+      await updateDoc(doc(db, 'users', currentUser.uid), { avatarFrame: frameId });
+      userDoc.avatarFrame = frameId;
+      invalidateUserCache(currentUser.uid);
+      _userCache[currentUser.uid] = { uid: currentUser.uid, ...userDoc };
+      // Update profile header frame
+      const frameData = getFrameById(frameId);
+      const frEl = profileArea?.querySelector('.profile-avatar-frame');
+      if (frEl && frameData?.image) frEl.src = frameData.image;
+      btn.innerHTML = '<i class="bi bi-check2-circle me-1"></i>Đã trang bị!';
+      btn.style.background = '#d1fae5'; btn.style.color = '#065f46';
+    } catch (err) {
+      btn.disabled = false;
+      btn.innerHTML = '<i class="bi bi-check2-circle me-1"></i>Trang bị';
+      alert('Lỗi: ' + (err.message || err));
+    }
+  }, { once: false });
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -1748,7 +1789,6 @@ async function openFramePicker() {
 }
 
 function renderFrameModalPreview(avatarSrc, frameId) {
-  // HTML has #frameModalPreview as a wrapper div (innerHTML approach)
   const wrapper = document.getElementById('frameModalPreview');
   const label   = document.getElementById('frameModalPreviewLabel');
   if (!wrapper) return;
@@ -1756,8 +1796,17 @@ function renderFrameModalPreview(avatarSrc, frameId) {
   const frameHtml = frame?.image
     ? `<img class="frame-preview-fr" src="${esc(frame.image)}" alt="frame">`
     : '';
+  // Apply avatarSettings transform so preview matches profile header exactly
+  const u   = userDoc || {};
+  const sc  = (u.avatarSettings?.scale      ?? 100) / 100;
+  const tx  =  u.avatarSettings?.translateX ?? 0;
+  const ty  =  u.avatarSettings?.translateY ?? 0;
+  const avVars = `--av-scale:${sc};--av-tx:${tx}px;--av-ty:${ty}px;`;
+  wrapper.style.cssText = avVars;
   wrapper.innerHTML = `
-    <img class="frame-preview-av" src="${esc(avatarSrc)}" alt="avatar">
+    <div class="frame-preview-clip">
+      <img class="frame-preview-av profile-avatar-img" style="width:100%;height:100%;" src="${esc(avatarSrc)}" alt="avatar">
+    </div>
     ${frameHtml}
   `;
   if (label) label.textContent = frame?.name || 'Không khung';
@@ -1783,9 +1832,17 @@ function renderFrameGrid(containerId, frames, avatarSrc, createdAt, currentFrame
     const unlockHint= (!unlocked && frame.requirementText)
       ? `<div class="frame-unlock-hint"><i class="bi bi-lock me-1"></i>${esc(frame.requirementText)}</div>` : '';
 
+    // Apply avatarSettings to each thumbnail so they match profile header
+    const _u   = userDoc || {};
+    const _sc  = (_u.avatarSettings?.scale      ?? 100) / 100;
+    const _tx  =  _u.avatarSettings?.translateX ?? 0;
+    const _ty  =  _u.avatarSettings?.translateY ?? 0;
+    const _avVars = `--av-scale:${_sc};--av-tx:${_tx}px;--av-ty:${_ty}px;`;
     card.innerHTML = `
-      <div class="frame-thumb-wrapper">
-        <img class="frame-thumb-avatar" src="${esc(avatarSrc)}" alt="avatar">
+      <div class="frame-thumb-wrapper" style="${_avVars}">
+        <div class="frame-thumb-clip">
+          <img class="frame-thumb-avatar profile-avatar-img" style="width:100%;height:100%;" src="${esc(avatarSrc)}" alt="avatar">
+        </div>
         ${frameOverlayHtml}
       </div>
       <div class="frame-card-name">${esc(frame.name)}</div>
@@ -2020,32 +2077,43 @@ function openEditModal(scrollTo) {
     </div>
     <hr>
     <div class="mb-2">
-      <div class="d-flex align-items-start gap-3 p-3 rounded-3" style="background:rgba(13,110,253,.06);border:1px solid rgba(13,110,253,.15);">
-        <i class="bi bi-arrow-repeat text-primary mt-1 fs-5 flex-shrink-0"></i>
+      <div class="d-flex align-items-start gap-3 p-3 rounded-3" style="background:rgba(234,179,8,.07);border:1px solid rgba(234,179,8,.25);">
+        <i class="bi bi-database-up" style="color:#b45309;font-size:1.1rem;margin-top:2px;flex-shrink:0;"></i>
         <div class="flex-fill">
-          <div class="fw-semibold small mb-1">Đồng bộ tên &amp; avatar</div>
-          <div class="text-muted" style="font-size:.78rem;line-height:1.5;">Xóa dữ liệu tên/avatar cũ trong tất cả bài viết và bình luận. Sau đó mọi nơi sẽ hiển thị thông tin mới nhất từ hồ sơ.</div>
-          <button id="btnForceSync" class="btn btn-sm btn-outline-primary btn-rounded mt-2">
-            <i class="bi bi-arrow-repeat me-1"></i>Ép chuyển đổi
+          <div class="fw-semibold small mb-1" style="color:#92400e;">
+            Chuyển đổi dữ liệu sang Relife 5
+            <span class="ms-1" style="font-size:.68rem;background:#fef3c7;color:#92400e;border:1px solid #fde68a;border-radius:4px;padding:1px 5px;vertical-align:middle;">Chạy 1 lần</span>
+          </div>
+          <div class="text-muted" style="font-size:.78rem;line-height:1.5;">
+            Xóa dữ liệu tên/avatar được lưu trực tiếp trong bài viết và bình luận (định dạng cũ R4). Relife 5 sẽ tự lấy thông tin mới nhất từ hồ sơ — không cần lưu riêng nữa.
+          </div>
+          <button id="btnForceSync" class="btn btn-sm btn-rounded mt-2" style="background:#fef3c7;border:1px solid #fbbf24;color:#92400e;">
+            <i class="bi bi-database-up me-1"></i>Chuyển đổi ngay
           </button>
         </div>
       </div>
     </div>`;
 
-  // Wire "Ép chuyển đổi" button
+  // Wire nút migrate R4 → R5 (chạy 1 lần duy nhất)
   document.getElementById('btnForceSync')?.addEventListener('click', async () => {
     const btn = document.getElementById('btnForceSync');
     if (!currentUser || !isOwner) return;
-    if (!confirm('Đồng bộ sẽ xóa tên/avatar cũ trong TẤT CẢ bài viết và bình luận của bạn. Tiếp tục?')) return;
+    if (!confirm(
+      'Chuyển đổi dữ liệu sang định dạng Relife 5?\n\n' +
+      'Thao tác này sẽ xóa tên/avatar được lưu trực tiếp trong bài viết và bình luận của bạn.\n' +
+      'Chỉ cần thực hiện 1 lần duy nhất.'
+    )) return;
     btn.disabled = true;
-    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Đang đồng bộ...';
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Đang chuyển đổi...';
     try {
       await forceRemoveStaleProfileData(currentUser.uid);
       btn.innerHTML = '<i class="bi bi-check-lg me-1"></i>Hoàn tất!';
-      btn.classList.replace('btn-outline-primary', 'btn-success');
+      btn.style.background = '#dcfce7';
+      btn.style.borderColor = '#86efac';
+      btn.style.color = '#166534';
     } catch(e) {
       btn.disabled = false;
-      btn.innerHTML = '<i class="bi bi-arrow-repeat me-1"></i>Ép chuyển đổi';
+      btn.innerHTML = '<i class="bi bi-database-up me-1"></i>Chuyển đổi ngay';
       alert('Lỗi: ' + (e.message || e));
     }
   });
@@ -2229,13 +2297,10 @@ async function _doSaveProfile() {
 
     await updateDoc(doc(db, 'users', currentUser.uid), updateData);
 
-    // Always propagate name/avatar to all posts and comments (await for reliability)
-    // Show progress to user since this may take a moment with many posts
-    if (btn) btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Đang đồng bộ...';
-    await propagateProfileToComments(currentUser.uid, newDisplay, newTag, newAvatarUrl || null);
-
+    // Update local state & cache — profile.js renders always read from _userCache,
+    // so no propagation to posts/comments is needed here.
+    // (Use "Ép chuyển đổi" button to sync legacy displayName fields for other pages)
     Object.assign(userDoc, updateData);
-    // Invalidate cache so all renders pick up new data immediately
     invalidateUserCache(currentUser.uid);
     _userCache[currentUser.uid] = { uid: currentUser.uid, ...userDoc };
     profileEditModal.hide();
@@ -2503,17 +2568,22 @@ async function _applyAccountTypeChange(viewerProf, targetProf) {
   _showAcctMsg(msgEl, 'Đang cập nhật...', 'info');
 
   try {
-    // If admin is transferring admin role: demote self to operator first
+    // Admin transferring admin role:
+    // MUST set target=admin FIRST (while caller is still admin in Firestore),
+    // THEN demote self — reversing the order would cause permission-denied
     if (viewerProf.type === 'admin' && newType === 'admin') {
+      // Step 1: Grant admin to target (caller is still admin in Firestore at this point)
+      await updateDoc(doc(db, 'users', profileUid), { type: 'admin' });
+      invalidateUserCache(profileUid);
+      // Step 2: Demote self to operator (now covered by Nhánh 4 — resource.data.type was 'admin')
       await updateDoc(doc(db, 'users', currentUser.uid), { type: 'operator' });
       invalidateUserCache(currentUser.uid);
-      // Update local userDoc if viewer = owner of this profile (unlikely but guard)
       if (currentUser.uid === profileUid) { userDoc.type = 'operator'; }
+    } else {
+      // Normal type change (non-admin-transfer)
+      await updateDoc(doc(db, 'users', profileUid), { type: newType });
+      invalidateUserCache(profileUid);
     }
-
-    // Update target user's type
-    await updateDoc(doc(db, 'users', profileUid), { type: newType });
-    invalidateUserCache(profileUid);
 
     _showAcctMsg(msgEl, `Đã cập nhật thành "${newCfg?.name || newType}"!`, 'success');
     btn.innerHTML = '<i class="bi bi-check2 me-1"></i>Áp dụng';

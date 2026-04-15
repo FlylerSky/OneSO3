@@ -2,4 +2,40 @@
 //Vui lòng append vào cuối file nếu có phiên bản mới hoặc ghi chú mới//
 ----------------
 r5.X.426/
-Nội dung update: #
+Nội dung update: #notification.html
+----------------
+r5.X.426 — profile.js V3.3 (patch sessions 7/3/2026 – 9/3/2026)
+Nội dung update: profile.html / profile.js / profile.css
+
+BUG FIXES:
+  - Bio Quill: init defer vào shown.bs.modal; blur() sau init (tránh bàn phím mobile bật)
+  - Image viewer (#profileImgViewer): xóa duplicate display:flex khiến viewer hiện khi load
+  - Avatar transform: buildAvatarWrap() — outer div không có overflow:hidden; frame img đặt
+    ngoài clip div (z-index:2, inset:-3px) → frame không bị clip ở menu/visitors/comments
+  - Comment modal lỗi "Cannot access '_commenterInfo' before initialization":
+    const _commenterInfo khai báo trước khi dùng trong buildCommentEl()
+  - Tên/avatar không đồng bộ: propagateProfileToComments() giờ luôn await, rolling batch
+    490 ops (không giới hạn số lượng), chạy luôn luôn sau save (không chỉ khi thay đổi)
+  - Firestore permission-denied: rules v6.0 thêm branch 3 cho comment update
+    {displayName, avatarUrl} cùng lúc
+  - Avatar frame không hiển thị ở menu / visitors / comment người khác:
+    userInfoCache → lưu thêm avatarFrame; buildAvatarWrap() fetch từ cache
+
+TÍNH NĂNG MỚI:
+  - Account Badge System: admin/moderator/vip/contributor/verified
+    BADGE_CONFIG, getUserBadges(u), renderBadges(u, maxVisible) với overflow collapse +N
+  - _userCache toàn cục: runtime luôn đọc từ users/{userId}, không đọc post/comment stale data
+    getUserProfile(), prewarmUserCache(), invalidateUserCache()
+  - buildAvatarWrap(profile, size, clickUid): avatar + transform + frame đồng nhất mọi nơi
+  - Nút "Ép chuyển đổi" trong edit modal: forceRemoveStaleProfileData() đồng bộ toàn bộ
+    posts + comments về displayName/avatarUrl hiện tại, rolling batch
+  - Social links: 6 platform (facebook/instagram/tiktok/youtube/github/website)
+    lưu users/{uid}.socialLinks, hiển thị trong profile info modal
+  - avatarSettings: scale/translateX/translateY áp dụng transform đồng nhất mọi nơi
+
+FILES THAY ĐỔI:
+  JS/profile.js   (2413 lines)
+  CSS/profile.css (1724 lines)
+  profile.html    (606 lines)
+  firestore.rules → v6.0 (thêm comment update branch 3)
+  data-firestore.txt → thêm avatarSettings, socialLinks, labels fields
